@@ -209,6 +209,33 @@ Para verificar manualmente los errores, configura temporalmente un modelo inexis
 un puerto de Ollama sin servidor (503) o un timeout muy pequeño (504), reiniciando el backend en cada caso.
 Restaura después los valores anteriores.
 
+### Verificación de cierre de la fase 2
+
+Verificada localmente el 22 de septiembre de 2026 con `qwen3:8b` instalado en Ollama.
+Se inició una instancia temporal de Uvicorn y se hicieron solicitudes HTTP reales,
+sin sustituir el modelo ni el servicio por mocks en esta prueba de integración.
+
+| Comprobación | Resultado |
+|---|---|
+| `GET /health` | 200, `{"status":"ok"}` |
+| `GET /docs` | 200 |
+| `POST /api/test-llm` con Qwen real | 200, respuesta en 12,67 segundos |
+| Prompt con solo espacios | 422 |
+| `python -m unittest discover -s tests -v` desde `backend/` | 8 pruebas aprobadas |
+| `python -m pip check` | Sin conflictos de dependencias |
+
+Prompt enviado: `Responde en una sola frase en espanol: que es una API?`
+
+Respuesta obtenida:
+
+```json
+{"response":"Una API es un conjunto de protocolos y herramientas que permite a diferentes aplicaciones comunicarse y compartir datos."}
+```
+
+La fase 2 queda cerrada. La fase 3 puede continuar conservando el contrato de
+`POST /api/test-llm` y el funcionamiento de `GET /health`. Cada integrante necesita
+su propio `.env`, Ollama y el modelo descargado para repetir la prueba real.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
