@@ -1,4 +1,4 @@
-# Plan de desarrollo por fases — Agente RAG con Ollama, Qwen, LangChain y LangGraph
+# Plan de desarrollo por fases — Agente RAG con Ollama, Qwen, LangChain, LangGraph y pgvector
 
 Este documento reúne prompts listos para copiar y pegar en Codex, organizados por fases de desarrollo.
 
@@ -18,7 +18,7 @@ El proyecto debe utilizar:
 - LangGraph
 - Ollama
 - Qwen como modelo LLM local
-- ChromaDB como base de datos vectorial
+- PostgreSQL con pgvector como base de datos vectorial
 - Embeddings ejecutados localmente
 - Autenticación de usuarios
 - Historial de conversaciones
@@ -75,7 +75,7 @@ IA:
 - Qwen
 
 Base vectorial:
-- ChromaDB
+- PostgreSQL con pgvector
 
 El repositorio debe ser un monorepo con una estructura similar a:
 
@@ -102,8 +102,7 @@ proyecto-agente/
 │   └── Dockerfile
 │
 ├── data/
-│   ├── documents/
-│   └── chroma/
+│   └── documents/
 │
 ├── docs/
 │   └── diagrams/
@@ -132,7 +131,7 @@ NO implementar todavía:
 - Qwen
 - LangChain
 - LangGraph
-- ChromaDB
+- PostgreSQL con pgvector
 - RAG
 - autenticación
 - carga de documentos
@@ -282,14 +281,14 @@ Al finalizar:
 
 ---
 
-## Fase 4 — Embeddings y ChromaDB
+## Fase 4 — Embeddings y PostgreSQL con pgvector
 
 ```text
 Ahora implementaremos exclusivamente la capa de embeddings y base vectorial.
 
 Usaremos:
 
-- ChromaDB
+- PostgreSQL con pgvector
 - embeddings locales
 - preferiblemente OllamaEmbeddings con nomic-embed-text
 
@@ -305,22 +304,39 @@ Implementar:
 
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
+Configurar también la conexión a PostgreSQL:
+
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=ragdb
+POSTGRES_USER=raguser
+POSTGRES_PASSWORD=ragpassword
+DATABASE_URL=postgresql+psycopg://raguser:ragpassword@localhost:5432/ragdb
+
+Asegurar que la extensión pgvector esté habilitada con:
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
 2. Crear un servicio de embeddings.
 
-3. Crear un servicio para ChromaDB.
+3. Crear un servicio para PostgreSQL con pgvector.
 
-4. La base debe persistir localmente en:
+4. La base vectorial debe persistir en PostgreSQL utilizando la extensión pgvector.
 
-data/chroma/
+5. Crear una tabla configurable para almacenar los chunks, embeddings y metadata.
 
-5. Crear una colección configurable.
+6. Cada fragmento almacenado debe persistirse en PostgreSQL con pgvector e incluir al menos:
 
-6. Cada fragmento almacenado debe incluir metadata como:
-
+- id
 - document_id
 - filename
 - page
 - chunk_index
+- content
+- embedding VECTOR(...)
+- metadata JSONB
+
+Usar una dimensión de vector compatible con el modelo de embeddings seleccionado.
 
 7. Crear un endpoint temporal de prueba:
 
@@ -344,6 +360,8 @@ Debe devolver:
 - fragmento
 - metadata
 - score o distancia
+
+La búsqueda debe realizarse mediante operadores de similitud de pgvector, por ejemplo distancia coseno, y debe permitir recuperar los Top-K resultados.
 
 9. Mantener la lógica separada del controlador.
 
@@ -374,7 +392,7 @@ Ahora implementaremos la carga y procesamiento de documentos.
 
 Objetivo:
 
-Permitir cargar archivos desde FastAPI y convertirlos en documentos indexados dentro de ChromaDB.
+Permitir cargar archivos desde FastAPI y convertirlos en documentos indexados dentro de PostgreSQL con pgvector.
 
 Soportar inicialmente solamente:
 
@@ -392,7 +410,7 @@ archivo
 → extracción de texto
 → división en chunks
 → embeddings
-→ ChromaDB
+→ PostgreSQL con pgvector
 → confirmación
 
 Implementar:
@@ -407,7 +425,7 @@ Crear servicios separados para:
 2. extracción de texto,
 3. chunking,
 4. embeddings,
-5. almacenamiento en ChromaDB.
+5. almacenamiento en PostgreSQL con pgvector.
 
 Para dividir texto utilizar RecursiveCharacterTextSplitter.
 
@@ -489,7 +507,7 @@ Body:
 El sistema debe:
 
 1. convertir la pregunta a embedding,
-2. consultar ChromaDB,
+2. consultar PostgreSQL con pgvector,
 3. recuperar los chunks más relevantes,
 4. construir el contexto,
 5. enviarlo a Qwen,
@@ -700,12 +718,12 @@ Añadir tests para:
 ```text
 Ahora implementaremos persistencia tradicional para usuarios, conversaciones e historial.
 
-No almacenar esto en ChromaDB.
+No mezclar el historial conversacional con la tabla vectorial. Puede usarse la misma instancia de PostgreSQL, pero en tablas relacionales separadas de las tablas de embeddings.
 
 Usar inicialmente:
 
 - SQLAlchemy
-- SQLite para desarrollo
+- PostgreSQL para desarrollo y producción
 
 Diseñar los modelos:
 
@@ -921,7 +939,7 @@ Usuario
 → FastAPI protegido
 → LangGraph
 → Retriever
-→ ChromaDB
+→ PostgreSQL con pgvector
 → Context grader
 → Qwen mediante Ollama
 → respuesta + fuentes
@@ -981,9 +999,9 @@ Posibles servicios:
 - backend
 - frontend
 - keycloak
-- postgres si ya fue incorporado
+- postgres con pgvector
 
-ChromaDB puede mantenerse embebido/persistido si esa es la arquitectura actual.
+PostgreSQL con pgvector puede mantenerse embebido/persistido si esa es la arquitectura actual.
 
 Ollama inicialmente puede correr en el host local para evitar problemas de GPU y compatibilidad.
 
@@ -1029,7 +1047,7 @@ Cubrir como mínimo:
 7. Retrieval con contenido existente.
 8. Pregunta válida → respuesta.
 9. Pregunta fuera del dominio → rechazo.
-10. ChromaDB vacía → rechazo.
+10. Base vectorial pgvector vacía → rechazo.
 11. Ollama no disponible → error controlado.
 12. Usuario A no puede acceder a información del usuario B.
 
@@ -1175,7 +1193,7 @@ Usuario
 → FastAPI
 → autenticación
 → LangGraph
-→ ChromaDB
+→ PostgreSQL con pgvector
 → Ollama/Qwen
 → base de datos de historial
 
@@ -1305,7 +1323,7 @@ Evalúa:
 6. LangChain.
 7. LangGraph.
 8. RAG.
-9. ChromaDB.
+9. PostgreSQL con pgvector.
 10. Embeddings.
 11. Ollama.
 12. Qwen.
