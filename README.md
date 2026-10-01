@@ -254,3 +254,4 @@ su propio `.env`, Ollama y el modelo descargado para repetir la prueba real.
 - [ ] Fase 14 — Testing
 - [ ] Fase 15 — Preparación para despliegue
 
+
