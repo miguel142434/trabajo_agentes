@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter
 
-from app.api.routes import health, llm
+from app.api.routes import health, llm, vector
 
 api_router = APIRouter(prefix="/api")
 
 api_router.include_router(health.router)
 api_router.include_router(llm.router)
+api_router.include_router(vector.router)

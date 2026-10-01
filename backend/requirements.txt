@@ -16,3 +16,7 @@ ollama==0.6.2
 
 # HTTP client
 httpx==0.28.1
+
+# PostgreSQL y vectores
+psycopg[binary]==3.3.6
+pgvector==0.5.0
