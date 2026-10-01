@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file="../.env",       # relativo al directorio de trabajo (backend/)
+        env_file=Path(__file__).resolve().parents[3] / ".env",
         env_file_encoding="utf-8-sig",
         case_sensitive=False,
         extra="ignore",
@@ -33,15 +34,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # ------------------------------------------------------------------
     # Ollama / LLM (Fase 2)
     # ------------------------------------------------------------------
     ollama_base_url: HttpUrl = "http://localhost:11434"
     ollama_model: str = Field(default="qwen3:8b", min_length=1)
-    ollama_temperature: float = Field(default=0, ge=0, le=2)
-    ollama_timeout: float = Field(default=120, gt=0)
+    ollama_temperature: float = Field(default=0, ge=0, le=2, allow_inf_nan=False)
+    ollama_timeout: float = Field(default=120, gt=0, allow_inf_nan=False)
 
 
 @lru_cache

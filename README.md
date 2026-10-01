@@ -236,11 +236,62 @@ La fase 2 queda cerrada. La fase 3 puede continuar conservando el contrato de
 `POST /api/test-llm` y el funcionamiento de `GET /health`. Cada integrante necesita
 su propio `.env`, Ollama y el modelo descargado para repetir la prueba real.
 
+## Fase 3 — Arquitectura de FastAPI y verificación
+
+`app/main.py` construye la aplicación mediante `create_app()`. El router
+`app/api/router.py` agrupa las rutas `/api`; `core/config.py` centraliza la
+configuración con Pydantic Settings, `core/exceptions.py` registra los manejadores
+globales de errores y `core/logging.py` configura los mensajes de consola.
+El servicio LLM conserva la integración de la fase 2.
+
+Se mantienen `GET /health` y su alias `GET /api/health`, ambos con
+`{"status":"ok"}`. La configuración carga el `.env` de la raíz mediante una ruta
+absoluta basada en el archivo de código, independiente del directorio de ejecución.
+
+Variables adicionales opcionales en `.env`:
+
+```dotenv
+LOG_LEVEL=INFO
+CORS_ORIGINS=["http://localhost:5173"]
+```
+
+`CORS_ORIGINS` debe ser un array JSON. Reinicia el backend después de modificar `.env`.
+Para observar el mensaje del health check, usa temporalmente `LOG_LEVEL=DEBUG`.
+
+Desde la raíz del repositorio:
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m pip check
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Abre http://localhost:8000/docs y prueba `POST /api/test-llm` como en la fase 2.
+Las pruebas automatizadas simulan fallos intencionados y pueden imprimir mensajes
+`ERROR`; el resultado final esperado de unittest es `OK`.
+
+Verificación del 1 de octubre de 2026:
+
+- 12 pruebas automatizadas aprobadas: rutas, contrato LLM, errores globales,
+  timeout, validación, configuración y CORS.
+- Dependencias sin conflictos (`pip check`).
+- Arranque real de Uvicorn desde la raíz con `--app-dir backend`.
+- `/health`, `/api/health` y `/docs`: HTTP 200.
+- Qwen real (`qwen3:8b`) mediante `POST /api/test-llm`: HTTP 200 en 13,12 segundos.
+  Respondió: “Una API es un conjunto de protocolos y herramientas que permite a
+  diferentes aplicaciones comunicarse y compartir datos de manera estructurada.”
+
+La fase 3 queda verificada. La fase 4 pendiente incorpora embeddings locales,
+PostgreSQL con pgvector y los endpoints de prueba de almacenamiento y búsqueda
+semántica definidos en `plan_desarrollo.md`.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
 - [x] Fase 2 — Integrar Ollama + Qwen
-- [ ] Fase 3 — Arquitectura profesional FastAPI
+- [x] Fase 3 — Arquitectura profesional FastAPI
 - [ ] Fase 4 — Embeddings y PostgreSQL con pgvector
 - [ ] Fase 5 — Carga y procesamiento de documentos
 - [ ] Fase 6 — RAG básico

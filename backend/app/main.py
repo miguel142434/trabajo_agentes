@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.routes.health import router as health_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
@@ -49,6 +50,8 @@ def create_app() -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
     app.include_router(api_router)
+    # Mantener la ruta pública original y el alias /api/health de la fase 3.
+    app.include_router(health_router)
 
     # ------------------------------------------------------------------
     # Exception handlers globales
