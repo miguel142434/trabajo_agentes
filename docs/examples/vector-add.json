@@ -1,0 +1,20 @@
+{
+  "chunks": [
+    {
+      "content": "Los gatos son animales domésticos que ronronean y cazan ratones.",
+      "filename": "gatos.txt",
+      "page": 1,
+      "metadata": {"tema": "animales"}
+    },
+    {
+      "content": "PostgreSQL es una base de datos relacional que permite consultar tablas mediante SQL.",
+      "filename": "datos.txt",
+      "metadata": {"tema": "tecnología"}
+    },
+    {
+      "content": "Para preparar pan se mezcla harina, agua y levadura y se hornea la masa.",
+      "filename": "pan.txt",
+      "metadata": {"tema": "cocina"}
+    }
+  ]
+}
