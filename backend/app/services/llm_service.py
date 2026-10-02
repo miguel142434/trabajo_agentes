@@ -5,6 +5,7 @@ from functools import lru_cache
 
 import httpx
 from langchain_ollama import ChatOllama
+from langchain_core.messages import BaseMessage
 from ollama import ResponseError
 
 from app.core.config import Settings, get_settings
@@ -38,7 +39,7 @@ class LLMService:
             client_kwargs={"timeout": settings.ollama_timeout},
         )
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str | list[BaseMessage]) -> str:
         try:
             # También limita la duración total si Ollama sigue enviando tokens.
             async with asyncio.timeout(self.settings.ollama_timeout):

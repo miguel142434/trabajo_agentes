@@ -444,15 +444,382 @@ Los tres textos de los ejemplos se dejaron en `document_chunks` de la base local
 repetir la búsqueda desde Swagger. Las tablas aisladas de integración se eliminan al finalizar.
 PostgreSQL queda ejecutándose; el servidor temporal de verificación de FastAPI se cerró.
 
+## Fase 5 — Carga de documentos deportivos
+
+Dominio elegido por el equipo: **deportes**, con Mundiales de fútbol y Fórmula 1
+como ejemplos iniciales. Consulta [la guía del dominio](docs/dominio-deportivo.md).
+El contenido lo aportan los documentos cargados; esta fase aún no redacta respuestas RAG.
+
+Flujo: archivo → validación → archivo temporal → extracción → fragmentos → embeddings
+locales → PostgreSQL/pgvector → confirmación.
+
+### Ejecución y configuración
+
+Desde la raíz, con Docker Desktop y Ollama abiertos:
+
+```powershell
+docker compose up -d postgres
+cd backend
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Los valores predeterminados funcionan sin modificar tu `.env`; `.env.example` incluye:
+
+```dotenv
+CHUNK_SIZE=800
+CHUNK_OVERLAP=120
+MAX_UPLOAD_BYTES=10485760
+MAX_DOCUMENT_CHARS=2000000
+MAX_DOCUMENT_CHUNKS=3000
+DOCUMENT_TABLE=uploaded_documents
+```
+
+El tamaño y solapamiento se miden en caracteres. El solapamiento debe ser menor que
+el tamaño, que tiene un máximo de 8000 caracteres. El splitter puede generar
+fragmentos menores según los separadores y los límites de página. El archivo tiene
+un máximo predeterminado de 10 MiB. Reinicia el backend tras cambiar la configuración.
+
+### Prueba desde Swagger
+
+1. Abre http://localhost:8000/docs.
+2. En `POST /api/documents/upload`, pulsa **Try it out** y selecciona un PDF, TXT o DOCX.
+   Puedes comenzar con `docs/examples/deportes/mundial-2022.txt`.
+3. Pulsa **Execute**. Espera un **201** con esta estructura:
+
+```json
+{
+  "document_id": "<UUID generado>",
+  "filename": "mundial-2022.txt",
+  "chunks_created": 1,
+  "status": "processed"
+}
+```
+
+La cantidad de fragmentos depende del texto y de la configuración.
+
+4. Ejecuta `GET /api/documents`. Devuelve una lista de documentos procesados, con
+   identificador, nombre, tipo, tamaño, fecha, modelo y número de fragmentos.
+5. Prueba `POST /api/vector/test-search`:
+
+```json
+{"query":"¿Qué selección ganó el Mundial de fútbol de 2022?","k":1}
+```
+
+El fragmento recuperado aparece en `results[0].content`; los datos de procedencia
+están en sus columnas y en `metadata`. Puedes repetir el proceso con `f1-2024.txt`.
+
+### Ejemplos curl
+
+Desde la raíz del repositorio, en otra terminal:
+
+```powershell
+curl.exe http://localhost:8000/api/documents/upload -F "file=@docs/examples/deportes/mundial-2022.txt"
+curl.exe http://localhost:8000/api/documents/upload -F "file=@docs/examples/deportes/f1-2024.txt"
+curl.exe "http://localhost:8000/api/documents?limit=100&offset=0"
+```
+
+En Bash usa `curl`. No añadas manualmente `Content-Type`: curl genera el multipart
+con su delimitador. `limit` admite 1–500; `offset` permite recorrer el listado,
+ordenado del más reciente al más antiguo.
+
+### Persistencia, validaciones y límites
+
+- PDF: texto por página con numeración desde 1. No se realiza OCR y se rechazan
+  archivos protegidos por contraseña. Un PDF sin texto extraíble produce 422.
+- TXT: UTF-8, con o sin BOM. Se rechazan contenidos binarios o vacíos.
+- DOCX: párrafos y tablas del cuerpo en orden. No se procesan imágenes, encabezados,
+  pies de página ni contenido multimedia; `page` es `null`, igual que en TXT.
+- Cada fragmento guarda `document_id`, `filename`, `file_type`, `page` y `chunk_index`
+  en JSONB, además de las columnas de búsqueda existentes.
+- Los embeddings se solicitan en lotes de hasta 32 fragmentos. Solo al terminar
+  se guardan el registro del documento y todos sus fragmentos en una transacción.
+- Si falla la extracción, Ollama o PostgreSQL, no se publica un documento parcialmente
+  procesado. Los archivos temporales se eliminan al terminar o fallar la petición.
+- Los originales no se conservan: lo persistido es el texto fragmentado, sus vectores
+  y el registro del documento. `UPLOAD_DIR` permite cambiar la carpeta temporal;
+  por defecto se utiliza `data/documents/`, ignorada por Git.
+- Subir el mismo archivo otra vez crea un documento con UUID nuevo. Esta fase no
+  incluye deduplicación, eliminación, historial ni autenticación.
+- El listado incluye archivos subidos para `VECTOR_TABLE`, aunque se haya cambiado
+  después el modelo. La búsqueda sigue filtrando por el modelo configurado.
+  Los textos manuales de la fase 4 no aparecen como archivos en `/api/documents`.
+
+| Código | Situación |
+|---|---|
+| 201 | Documento procesado e indexado |
+| 413 | Límite de tamaño, texto extraído, DOCX descomprimido o cantidad de fragmentos excedido |
+| 415 | Extensión distinta de PDF, TXT o DOCX |
+| 422 | Archivo vacío, inválido, sin texto, cifrado o nombre no válido |
+| 409/502/503/504 | Errores de dimensión, embeddings o PostgreSQL documentados en la fase 4 |
+
+### Arquitectura y pruebas
+
+Se añadieron `services/file_storage.py`, `services/text_extraction.py`,
+`services/chunking_service.py` y `services/document_service.py`, junto con
+`schemas/document.py` y `api/routes/documents.py`. Se reutilizan `EmbeddingService`
+y `PostgresVectorStore`; este último registra también los archivos en `DOCUMENT_TABLE`.
+
+La división utiliza [RecursiveCharacterTextSplitter](https://reference.langchain.com/python/langchain-text-splitters/character/RecursiveCharacterTextSplitter).
+La extracción utiliza pypdf y [python-docx](https://python-docx.readthedocs.io/en/latest/).
+
+Desde `backend/`, pruebas sin servicios externos:
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Para incluir la integración real (Ollama y PostgreSQL encendidos):
+
+```powershell
+$env:TEST_VECTOR_INTEGRATION="1"
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+Remove-Item Env:TEST_VECTOR_INTEGRATION
+```
+
+Las pruebas generan PDF, TXT y DOCX en temporales, comprueban la limpieza y los
+errores y usan tablas de integración aisladas. Esas tablas se eliminan al terminar.
+
+### Verificación de cierre (2 de octubre de 2026)
+
+- 37 pruebas aprobadas, incluidas las integraciones reales de las fases 4 y 5.
+- Sin conflictos de dependencias (`pip check`).
+- Carga real de PDF, TXT y DOCX con Ollama y PostgreSQL, listado mediante conexiones
+  nuevas, metadatos correctos y búsqueda del fragmento deportivo esperado.
+- Reversión verificada: una inserción vectorial inválida no deja el documento
+  registrado ni sus fragmentos parcialmente guardados.
+- Uvicorn y HTTP real: carga de `mundial-2022.txt` y `f1-2024.txt` con 201,
+  listado con 200 y búsqueda de ambos con 200. Distancias del primer resultado:
+  `0.172077` para el campeón del Mundial 2022 y `0.281785` para el cuarto título de Verstappen.
+- Ambos ejemplos deportivos quedaron indexados en la base local. No quedaron
+  archivos temporales TXT tras esas cargas. El servidor temporal de verificación se cerró.
+
+## Fase 6 — RAG básico con respuestas y fuentes
+
+`POST /api/chat/rag` conecta la recuperación documental con Qwen:
+pregunta → embeddings → Top-K en pgvector → contexto → prompt de LangChain
+→ Qwen a temperatura 0 → respuesta y fuentes.
+
+### Probar desde Swagger
+
+Con PostgreSQL y Ollama encendidos, inicia el backend como en la fase 5 y abre
+http://localhost:8000/docs. Primero carga los documentos deportivos de ejemplo si
+aún no aparecen en `GET /api/documents`. Después ejecuta `POST /api/chat/rag`:
+
+```json
+{"question":"¿Qué selección ganó el Mundial de fútbol de 2022?"}
+```
+
+La respuesta tiene este formato (el texto exacto puede variar):
+
+```json
+{
+  "answer": "Argentina ganó el Mundial masculino de fútbol de 2022.",
+  "sources": [{"document":"mundial-2022.txt","page":null,"chunk_index":0}]
+}
+```
+
+`answer` es la respuesta redactada por Qwen. `sources` identifica los fragmentos
+que el modelo citó entre los que recibió; sus nombres y páginas los completa el
+backend desde la base, no desde nombres inventados por el modelo. TXT y DOCX
+conservan `page: null`; PDF conserva el número de página.
+
+Prueba también una pregunta sin información en esos documentos:
+
+```json
+{"question":"¿Cuál es la composición química de la atmósfera de Venus?"}
+```
+
+Resultado esperado para ese corpus:
+
+```json
+{
+  "answer":"No tengo suficiente información en mi base de conocimiento para responder esa pregunta.",
+  "sources":[]
+}
+```
+
+Ambos son resultados HTTP 200: el rechazo por falta de información es una respuesta
+válida. Una base sin fragmentos del modelo configurado se rechaza sin llamar a Qwen.
+Los fallos de Ollama o PostgreSQL conservan sus códigos de error y no se confunden
+con falta de conocimiento.
+
+Desde la raíz del repositorio:
+
+```powershell
+curl.exe http://localhost:8000/api/chat/rag -H "Content-Type: application/json" --data-binary "@docs/examples/rag-question.json"
+curl.exe http://localhost:8000/api/chat/rag -H "Content-Type: application/json" --data-binary "@docs/examples/rag-outside-domain.json"
+```
+
+### Configuración y alcance
+
+```dotenv
+RAG_TOP_K=4
+RAG_MAX_CONTEXT_CHARS=6000
+```
+
+La pregunta admite hasta 2000 caracteres. `RAG_TOP_K` admite 1–20 fragmentos y
+`RAG_MAX_CONTEXT_CHARS` limita el texto documental enviado (100–12000 caracteres).
+Si un fragmento excede el presupuesto restante, se envía solo su inicio.
+Para RAG se fuerza temperatura 0, salida JSON y una ventana de 8192 tokens.
+`/api/test-llm` conserva su configuración y generación libre anterior.
+
+El prompt exige responder solo con el contexto y tratar las instrucciones dentro
+de los documentos como datos. Una respuesta sin referencias se convierte en rechazo;
+JSON inválido o referencias inexistentes producen 502. Se eliminan referencias repetidas.
+Esto verifica la procedencia de las referencias, no demuestra automáticamente que
+todas las afirmaciones del modelo estén respaldadas. La fase 7 incorpora el grader
+básico del grafo; la fase 8 reforzará la evaluación y añadirá umbrales de relevancia.
+
+La especialización deportiva depende de los documentos almacenados. Este endpoint
+no busca en internet ni filtra automáticamente documentos por deporte. No incluye
+memoria conversacional ni autenticación. Desde la fase 7 se ejecuta mediante LangGraph.
+
+### Separación de responsabilidades
+
+- `services/rag_retriever.py`: recupera fragmentos usando el servicio vectorial existente.
+- `services/rag_prompt.py`: construye contexto e instrucciones con `ChatPromptTemplate`.
+- `services/rag_service.py`: coordina la generación con el servicio LLM existente.
+- `services/rag_sources.py`: valida y formatea las referencias.
+- `schemas/rag.py` y `api/routes/chat.py`: contrato y endpoint.
+- `tests/test_rag.py`: respuesta, rechazo, base vacía, fuentes, formato, errores y límites.
+
+Ejecuta las pruebas con el comando de la fase 5. Los ejemplos curl anteriores
+constituyen las pruebas manuales de pregunta respondible y fuera del dominio.
+
+### Verificación de cierre (2 de octubre de 2026)
+
+- 46 pruebas aprobadas, incluidas las integraciones de documentos y pgvector.
+- Sin conflictos de dependencias (`pip check`).
+- Endpoint probado mediante TestClient con PostgreSQL, embeddings y Qwen reales,
+  sin sustituir el retriever ni el LLM: temperatura efectiva 0.
+- Pregunta: “Que seleccion gano el Mundial de futbol de 2022?” → HTTP 200,
+  “Argentina ganó el Mundial de fútbol de 2022.”, fuente `mundial-2022.txt`,
+  `page: null`, `chunk_index: 0`.
+- Pregunta: “Cual es la composicion quimica de la atmosfera de Venus?” → HTTP 200,
+  rechazo exacto y `sources: []`.
+
+Esta comprobación valida esos casos del corpus local; no garantiza ausencia de
+alucinaciones para cualquier pregunta. El control adicional está previsto en la fase 8.
+
+## Fase 7 — Agente RAG con LangGraph
+
+El endpoint `POST /api/chat/rag` conserva el contrato `{question}` → `{answer, sources}`,
+pero `RAGService` delega ahora su ejecución a un `StateGraph` compilado.
+Se reutilizan el retriever, el prompt, el servicio de Ollama y el formateo de fuentes.
+
+```mermaid
+flowchart TD
+    START --> receive_question
+    receive_question --> validate_question
+    validate_question --> retrieve_context
+    retrieve_context --> grade_context
+    grade_context -->|Suficiente| generate_answer
+    grade_context -->|Insuficiente| reject_question
+    generate_answer -->|Respuesta con fuentes| save_interaction
+    generate_answer -->|Rechazo del generador| reject_question
+    reject_question --> save_interaction
+    save_interaction --> END
+```
+
+`AgentState` contiene `user_id`, `conversation_id`, `question`, `retrieved_documents`,
+`context_score`, `answer`, `sources` y `status`, además del prompt limitado y el resultado
+de evaluación. `user_id` y `conversation_id` son `None` en el endpoint actual; no se ha
+añadido autenticación ni memoria conversacional.
+
+| Nodo | Responsabilidad |
+|---|---|
+| `receive_question` | Inicializa los datos de esta ejecución sin reutilizar respuestas anteriores |
+| `validate_question` | Valida la pregunta incluso si se invoca el grafo directamente |
+| `retrieve_context` | Recupera Top-K fragmentos de PostgreSQL |
+| `grade_context` | Pregunta a Qwen si el contexto limitado permite contestar completamente |
+| `generate_answer` | Genera y valida la respuesta y sus referencias |
+| `reject_question` | Devuelve la frase de rechazo exacta y fuentes vacías |
+| `save_interaction` | Registra el resultado en el estado de la ejecución actual |
+
+El grader devuelve un JSON con un booleano `sufficient`. Su decisión controla una
+arista condicional real del grafo. Si no hay contexto, no se invoca ni al evaluador ni al
+generador. Si hay contexto insuficiente, se evita la llamada al generador. El generador
+también puede rechazar aunque el grader haya aprobado el contexto.
+
+`context_score` es la mayor similitud coseno (`1 - distance`) entre los fragmentos
+seleccionados: es diagnóstico, no una probabilidad ni un umbral de aceptación.
+La fase 8 reforzará este control con umbrales y pruebas específicas de alucinaciones.
+Los errores técnicos mantienen los handlers existentes: no se convierten en rechazos
+por falta de información.
+
+**Alcance de `save_interaction`:** utiliza `InteractionService` y deja un registro
+con `persisted: false` dentro del resultado interno del grafo. No escribe conversaciones
+en PostgreSQL, no comparte historial entre peticiones y no crea una lista global en memoria.
+El historial persistente corresponde a la fase 9. El endpoint continúa devolviendo
+únicamente `answer` y `sources`.
+
+### Ejecutar y comprobar
+
+Desde `backend/`:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Con Ollama y PostgreSQL activos, usa los ejemplos de la fase 6 en `/docs`.
+En la terminal aparecen los nodos de recuperación y evaluación, la ruta elegida y el
+registro final. Con contexto suficiente se hacen dos llamadas a Qwen (evaluación y
+generación), por lo que puede tardar más que la fase 6. `OLLAMA_TIMEOUT` se aplica
+a cada llamada, no a la duración completa del grafo.
+
+La suite se ejecuta igual que en las fases anteriores. `tests/test_agent.py` verifica
+las ramas, el estado por ejecución, la validación, el rechazo posterior a generación,
+la propagación de errores y el diagrama.
+
+### Archivos y diagrama
+
+- `app/agents/state.py`: estado tipado del agente.
+- `app/agents/graph.py`: nodos, edges, conditional edges, START y END.
+- `app/agents/nodes/rag_nodes.py`: implementación de los siete nodos.
+- `app/services/context_grader.py`: evaluación básica de suficiencia.
+- `app/services/interaction_service.py`: registro por ejecución.
+- `app/services/rag_service.py`: fachada compatible que invoca el grafo.
+
+El diagrama generado desde el grafo real está en
+[`docs/diagrams/agent-graph.mmd`](docs/diagrams/agent-graph.mmd).
+Para regenerarlo sin conectar a Ollama ni PostgreSQL, desde `backend/`:
+
+```powershell
+.venv\Scripts\python.exe -m app.agents.graph | Set-Content -Encoding utf8 ../docs/diagrams/agent-graph.mmd
+```
+
+La función `graph_mermaid(graph)` usa `get_graph().draw_mermaid()` y no requiere
+un servicio externo de imágenes. La implementación usa la
+[API oficial de StateGraph](https://reference.langchain.com/python/langgraph/graph/state/StateGraph).
+
+### Verificación de cierre (2 de octubre de 2026)
+
+- 56 pruebas aprobadas, incluidas las integraciones de las fases anteriores.
+- Dependencias sin conflictos y exportación Mermaid comprobada.
+- Endpoint probado mediante TestClient, con Qwen, Ollama y PostgreSQL reales.
+- Mundial 2022: `grade_context` aprobó el contexto, `generate_answer` respondió
+  “Argentina ganó el Mundial de fútbol de 2022.” con fuente `mundial-2022.txt`,
+  página `null`, fragmento 0; HTTP 200. Tiempo total observado: 134,97 segundos.
+- Atmósfera de Venus: `grade_context` devolvió insuficiente y pasó directamente
+  por `reject_question` y `save_interaction`, sin generar una respuesta libre;
+  rechazo exacto, fuentes vacías y HTTP 200. Tiempo observado: 55,80 segundos.
+- Ambas ramas finalizaron con un registro interno `persisted: false`.
+
+Los tiempos corresponden al equipo local con Qwen ejecutándose en CPU; no son una
+garantía de latencia. Los casos probados no garantizan que el evaluador acierte siempre;
+la fase 8 reforzará el control de alucinaciones.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
 - [x] Fase 2 — Integrar Ollama + Qwen
 - [x] Fase 3 — Arquitectura profesional FastAPI
 - [x] Fase 4 — Embeddings y PostgreSQL con pgvector
-- [ ] Fase 5 — Carga y procesamiento de documentos
-- [ ] Fase 6 — RAG básico
-- [ ] Fase 7 — Agente con LangGraph
+- [x] Fase 5 — Carga y procesamiento de documentos
+- [x] Fase 6 — RAG básico
+- [x] Fase 7 — Agente con LangGraph
 - [ ] Fase 8 — Control de alucinaciones
 - [ ] Fase 9 — Base de datos para historial
 - [ ] Fase 10 — Autenticación y seguridad

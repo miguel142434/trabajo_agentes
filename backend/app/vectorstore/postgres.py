@@ -73,9 +73,45 @@ class PostgresVectorStore:
         except Error as exc:
             raise AppError("Falló la operación en PostgreSQL. Revisa pgvector, permisos y esquema de la tabla.", 503) from exc
 
-    def add(self, document_id, chunks, vectors):
+    def _ensure_documents(self, conn):
+        conn.execute("SELECT pg_advisory_xact_lock(417005)")
+        conn.execute(sql.SQL("""
+            CREATE TABLE IF NOT EXISTS {} (
+                document_id UUID PRIMARY KEY,
+                filename TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                size_bytes BIGINT NOT NULL,
+                chunks_created INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'processed',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                embedding_model TEXT NOT NULL,
+                vector_table TEXT NOT NULL
+            )
+        """).format(sql.Identifier("public", self.settings.document_table)))
+
+    def list_documents(self, limit=100, offset=0):
+        with self.connection() as conn:
+            self._ensure_documents(conn)
+            return conn.execute(sql.SQL("""
+                SELECT document_id, filename, file_type, size_bytes, chunks_created,
+                       status, created_at, embedding_model
+                FROM {} WHERE vector_table = %s
+                ORDER BY created_at DESC, document_id ASC LIMIT %s OFFSET %s
+            """).format(sql.Identifier("public", self.settings.document_table)),
+                (self.settings.vector_table, limit, offset)).fetchall()
+
+    def add(self, document_id, chunks, vectors, *, document=None):
         ids = [uuid4() for _ in chunks]
         with self.connection() as conn:
+            if document is not None:
+                self._ensure_documents(conn)
+                conn.execute(sql.SQL("""
+                    INSERT INTO {} (document_id, filename, file_type, size_bytes, chunks_created,
+                                    embedding_model, vector_table)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """).format(sql.Identifier("public", self.settings.document_table)),
+                    (document_id, document["filename"], document["file_type"], document["size_bytes"],
+                     len(chunks), self.settings.ollama_embedding_model, self.settings.vector_table))
             with conn.cursor() as cursor:
                 cursor.executemany(sql.SQL("""
                     INSERT INTO {} (id, document_id, filename, page, chunk_index,

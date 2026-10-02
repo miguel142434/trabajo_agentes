@@ -1,0 +1,28 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	receive_question(receive_question)
+	validate_question(validate_question)
+	retrieve_context(retrieve_context)
+	grade_context(grade_context)
+	generate_answer(generate_answer)
+	reject_question(reject_question)
+	save_interaction(save_interaction)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> receive_question;
+	generate_answer -.-> reject_question;
+	generate_answer -.-> save_interaction;
+	grade_context -.-> generate_answer;
+	grade_context -.-> reject_question;
+	receive_question --> validate_question;
+	reject_question --> save_interaction;
+	retrieve_context --> grade_context;
+	validate_question --> retrieve_context;
+	save_interaction --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

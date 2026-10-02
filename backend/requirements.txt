@@ -12,6 +12,7 @@ python-dotenv==1.0.1
 
 # LLM — Ollama + LangChain
 langchain-ollama==1.1.0
+langgraph==1.2.12
 ollama==0.6.2
 
 # HTTP client
@@ -20,3 +21,9 @@ httpx==0.28.1
 # PostgreSQL y vectores
 psycopg[binary]==3.3.6
 pgvector==0.5.0
+
+# Carga y procesamiento de documentos
+python-multipart==0.0.32
+pypdf==6.19.0
+python-docx==1.2.0
+langchain-text-splitters==1.1.2
