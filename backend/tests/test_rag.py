@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.context_grader import ContextVerdict
 from app.schemas.rag import REFUSAL
 from app.schemas.vector import VectorMatch
 from app.services.llm_service import LLMTimeoutError
@@ -22,7 +23,7 @@ class RAGTests(unittest.TestCase):
     def setUp(self):
         self.retriever = Mock(retrieve=AsyncMock(return_value=[match(), match("otro.txt")]))
         self.llm = Mock(generate=AsyncMock(return_value=json.dumps({"answer": "Argentina.", "source_ids": [1]})))
-        self.grader = Mock(grade=AsyncMock(return_value=True))
+        self.grader = Mock(grade=AsyncMock(return_value=ContextVerdict(classification="SUFFICIENT")))
         self.service = RAGService(self.retriever, self.llm, grader=self.grader)
         app.dependency_overrides[get_rag_service] = lambda: self.service
         self.client = TestClient(app)

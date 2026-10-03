@@ -32,7 +32,8 @@ async def benchmark(args):
         llm.model.num_predict = settings.rag_max_output_tokens
         llm.model.keep_alive = settings.rag_keep_alive
     service = RAGService(RAGRetriever(get_vector_service(), settings.rag_top_k), llm,
-                         settings.rag_max_context_chars, single_pass=args.mode == "single")
+                         settings.rag_max_context_chars, single_pass=args.mode == "single",
+                         min_relevance_score=settings.rag_min_relevance_score)
     cases = [
         ("¿Qué selección ganó el Mundial de fútbol de 2022?", "Argentina", "mundial-2022.txt"),
         ("¿Cuál es la composición química de la atmósfera de Venus?", None, None),
@@ -43,7 +44,8 @@ async def benchmark(args):
             ("¿Quién ganó el Mundial de 2022 y cuál era el salario exacto de su entrenador?", None, None),
         ]
     report = {"mode": args.mode, "model": settings.ollama_model, "top_k": settings.rag_top_k,
-              "max_context_chars": settings.rag_max_context_chars, "num_ctx": 8192, "results": []}
+              "max_context_chars": settings.rag_max_context_chars, "num_ctx": 8192,
+              "min_relevance_score": settings.rag_min_relevance_score, "results": []}
     for question, text, document in cases:
         started = perf_counter()
         result = await service.answer(question)

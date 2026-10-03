@@ -13,12 +13,13 @@ from app.services.vector_service import get_vector_service
 
 
 class RAGService:
-    def __init__(self, retriever, llm, max_context_chars=6000, *, grader=None, interactions=None, single_pass=False):
+    def __init__(self, retriever, llm, max_context_chars=6000, *, grader=None, interactions=None, single_pass=False, min_relevance_score=0.65):
         self.retriever = retriever
         self.llm = llm
         self.max_context_chars = max_context_chars
         self.graph = build_graph(retriever, llm, grader or ContextGrader(llm),
-                                 interactions or InteractionService(), max_context_chars, single_pass=single_pass)
+                                 interactions or InteractionService(), max_context_chars,
+                                 single_pass=single_pass, min_relevance_score=min_relevance_score)
 
     async def answer(self, question):
         state = await self.graph.ainvoke({"question": question, "user_id": None, "conversation_id": None})
@@ -35,4 +36,5 @@ def get_rag_service():
     llm.model.num_predict = settings.rag_max_output_tokens
     llm.model.keep_alive = settings.rag_keep_alive
     return RAGService(RAGRetriever(get_vector_service(), settings.rag_top_k), llm,
-                      settings.rag_max_context_chars, single_pass=settings.rag_single_pass)
+                      settings.rag_max_context_chars, single_pass=settings.rag_single_pass,
+                      min_relevance_score=settings.rag_min_relevance_score)

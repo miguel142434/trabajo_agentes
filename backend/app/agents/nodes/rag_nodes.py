@@ -1,6 +1,7 @@
 """Nodos con dependencias inyectadas; cada uno devuelve cambios al AgentState."""
 
 import logging
+import math
 from time import perf_counter
 
 from pydantic import ValidationError
@@ -16,20 +17,21 @@ logger = logging.getLogger(__name__)
 
 
 class RAGNodes:
-    def __init__(self, retriever, llm, grader, interactions, max_context_chars, *, single_pass=False):
+    def __init__(self, retriever, llm, grader, interactions, max_context_chars, *, single_pass=False, min_relevance_score=0.65):
         self.retriever = retriever
         self.llm = llm
         self.grader = grader
         self.interactions = interactions
         self.max_context_chars = max_context_chars
         self.single_pass = single_pass
+        self.min_relevance_score = min_relevance_score
 
     def receive_question(self, state: AgentState):
         # Reiniciar los datos derivados: no compartir respuestas entre consultas.
         return {"user_id": state.get("user_id"), "conversation_id": state.get("conversation_id"),
                 "retrieved_documents": [], "context_score": 0.0, "context_sufficient": False,
                 "answer": "", "sources": [], "selected_documents": [], "prompt": [],
-                "interaction": {}, "prepared_answer": None, "status": "received"}
+                "interaction": {}, "prepared_answer": None, "context_classification": "INSUFFICIENT", "status": "received"}
 
     def validate_question(self, state: AgentState):
         try:
@@ -46,7 +48,13 @@ class RAGNodes:
 
     async def grade_context(self, state: AgentState):
         started = perf_counter()
-        prompt, selected = build_prompt(state["question"], state["retrieved_documents"], self.max_context_chars)
+        scores = [1.0 - doc.distance for doc in state["retrieved_documents"]]
+        # El umbral es estricto: igualdad, NaN y distancias inválidas no aportan evidencia.
+        relevant = [doc for doc, score in zip(state["retrieved_documents"], scores)
+                    if math.isfinite(score) and -1 <= score <= 1 and score > self.min_relevance_score]
+        logger.info("relevance_filter: retrieved=%s scores=%s threshold=%.4f retained=%s",
+                    len(scores), scores, self.min_relevance_score, len(relevant))
+        prompt, selected = build_prompt(state["question"], relevant, self.max_context_chars)
         # Evaluar exactamente el contexto limitado que recibirá el generador.
         prepared = None
         sufficient = False
@@ -56,12 +64,15 @@ class RAGNodes:
             if sufficient:
                 prepared = result.model_dump(exclude={"sufficient"})
         elif selected:
-            sufficient = await self.grader.grade(prompt)
+            verdict = await self.grader.grade(prompt)
+            sufficient = verdict.classification == "SUFFICIENT"
+        classification = "SUFFICIENT" if sufficient else "INSUFFICIENT"
         score = max((1.0 - doc.distance for doc in selected), default=0.0)
-        logger.info("grade_context: sufficient=%s, context_score=%.4f, single_pass=%s, elapsed=%.2fs",
-                    sufficient, score, self.single_pass, perf_counter() - started)
+        logger.info("grade_context: classification=%s, context_score=%.4f, single_pass=%s, elapsed=%.2fs",
+                    classification, score, self.single_pass, perf_counter() - started)
         return {"prompt": prompt, "selected_documents": selected, "context_score": score,
-                "context_sufficient": sufficient, "prepared_answer": prepared, "status": "graded"}
+                "context_sufficient": sufficient, "context_classification": classification,
+                "prepared_answer": prepared, "status": "graded"}
 
     async def generate_answer(self, state: AgentState):
         logger.info("Ruta del agente: generate_answer")

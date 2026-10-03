@@ -13,6 +13,7 @@ class AgentState(TypedDict, total=False):
     retrieved_documents: list[VectorMatch]
     context_score: float
     context_sufficient: bool
+    context_classification: str
     prepared_answer: dict | None
     prompt: list[BaseMessage]
     selected_documents: list[VectorMatch]

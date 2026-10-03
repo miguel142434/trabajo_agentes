@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 from app.agents.graph import build_graph, graph_mermaid
 from app.core.exceptions import AppError
 from app.schemas.rag import REFUSAL
-from app.services.context_grader import ContextGrader
+from app.services.context_grader import ContextGrader, ContextVerdict
 from app.services.interaction_service import InteractionService
 from app.services.llm_service import LLMError, LLMTimeoutError
 from tests.test_rag import match
@@ -16,7 +16,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.retriever = Mock(retrieve=AsyncMock(return_value=[match()]))
         self.llm = Mock(generate=AsyncMock(return_value=json.dumps({"answer": "Argentina", "source_ids": [1]})))
-        self.grader = Mock(grade=AsyncMock(return_value=True))
+        self.grader = Mock(grade=AsyncMock(return_value=ContextVerdict(classification="SUFFICIENT")))
         self.interactions = InteractionService()
         self.graph = build_graph(self.retriever, self.llm, self.grader, self.interactions)
 
@@ -28,7 +28,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
                                              "grade_context", "generate_answer", "save_interaction"])
 
     async def test_insufficient_route_never_generates(self):
-        self.grader.grade.return_value = False
+        self.grader.grade.return_value = ContextVerdict(classification="INSUFFICIENT")
         self.assertEqual(await self.path(), ["receive_question", "validate_question", "retrieve_context",
                                              "grade_context", "reject_question", "save_interaction"])
         self.llm.generate.assert_not_awaited()
@@ -89,10 +89,12 @@ class ContextGraderTests(unittest.IsolatedAsyncioTestCase):
         prompt, _ = build_prompt("Pregunta", [match()], 6000)
         llm = Mock(generate=AsyncMock())
         grader = ContextGrader(llm)
-        for value in (True, False):
-            llm.generate.return_value = json.dumps({"sufficient": value})
-            self.assertIs(await grader.grade(prompt), value)
-        for raw in ('{"sufficient":"true"}', 'no json', '{"sufficient":true,"reason":"secret"}'):
+        for value in ("SUFFICIENT", "INSUFFICIENT"):
+            llm.generate.return_value = json.dumps({"classification": value})
+            self.assertEqual((await grader.grade(prompt)).classification, value)
+        for raw in ('{"sufficient":"true"}', 'no json',
+                    '{"classification":"SUFFICIENT","reason":"secret"}',
+                    '{"classification":"MAYBE"}', '{"classification":true}'):
             llm.generate.return_value = raw
             with self.assertRaises(LLMError):
                 await grader.grade(prompt)
