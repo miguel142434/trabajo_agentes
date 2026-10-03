@@ -1,6 +1,8 @@
-"""Punto de entrada de la aplicación FastAPI (Fase 3 — arquitectura profesional)."""
+"""Punto de entrada de la aplicación FastAPI."""
 
 from __future__ import annotations
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,16 @@ from app.api.routes.health import router as health_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicializar base de datos
+    await init_db()
+    yield
+    # Shutdown
+    pass
 
 
 def create_app() -> FastAPI:
@@ -26,6 +38,7 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     app = FastAPI(
         title=settings.app_title,
+        lifespan=lifespan,
         description=(
             "API para agente inteligente basado en RAG con Ollama, "
             "Qwen, LangChain y LangGraph."
@@ -33,6 +46,12 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         docs_url="/docs",
         redoc_url="/redoc",
+        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
+        swagger_ui_init_oauth={
+            "clientId": "rag-frontend",
+            "appName": "RAG Agent",
+            "usePkceWithAuthorizationCodeGrant": True,
+        }
     )
 
     # ------------------------------------------------------------------
@@ -50,7 +69,7 @@ def create_app() -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
     app.include_router(api_router)
-    # Mantener la ruta pública original y el alias /api/health de la fase 3.
+    # Incluir router de health check
     app.include_router(health_router)
 
     # ------------------------------------------------------------------
@@ -62,3 +81,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+

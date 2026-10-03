@@ -27,3 +27,12 @@ python-multipart==0.0.32
 pypdf==6.19.0
 python-docx==1.2.0
 langchain-text-splitters==1.1.2
+
+# Base de datos relacional
+SQLAlchemy==2.0.35
+
+
+# Autenticacion
+PyJWT==2.8.0
+cryptography==42.0.5
+

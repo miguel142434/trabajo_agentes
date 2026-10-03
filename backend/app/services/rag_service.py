@@ -21,8 +21,8 @@ class RAGService:
                                  interactions or InteractionService(), max_context_chars,
                                  single_pass=single_pass, min_relevance_score=min_relevance_score)
 
-    async def answer(self, question):
-        state = await self.graph.ainvoke({"question": question, "user_id": None, "conversation_id": None})
+    async def answer(self, question, user_id=None, conversation_id=None):
+        state = await self.graph.ainvoke({"question": question, "user_id": user_id, "conversation_id": conversation_id})
         return RAGResponse(answer=state["answer"], sources=state["sources"])
 
 
@@ -38,3 +38,4 @@ def get_rag_service():
     return RAGService(RAGRetriever(get_vector_service(), settings.rag_top_k), llm,
                       settings.rag_max_context_chars, single_pass=settings.rag_single_pass,
                       min_relevance_score=settings.rag_min_relevance_score)
+
