@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=120, ge=0)
     rag_top_k: int = Field(default=4, ge=1, le=20)
     rag_max_context_chars: int = Field(default=6000, ge=100, le=12000)
+    rag_single_pass: bool = True
+    rag_max_output_tokens: int = Field(default=512, ge=64, le=2048)
+    rag_keep_alive: str = "15m"
 
     @model_validator(mode="after")
     def validate_documents(self):

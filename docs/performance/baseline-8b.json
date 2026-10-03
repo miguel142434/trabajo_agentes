@@ -1,0 +1,29 @@
+{
+  "mode": "two",
+  "model": "qwen3:8b",
+  "top_k": 4,
+  "max_context_chars": 6000,
+  "num_ctx": 8192,
+  "results": [
+    {
+      "question": "¿Qué selección ganó el Mundial de fútbol de 2022?",
+      "elapsed_seconds": 88.63,
+      "passed": true,
+      "answer": "Argentina ganó el Mundial de fútbol de 2022.",
+      "sources": [
+        {
+          "document": "mundial-2022.txt",
+          "page": null,
+          "chunk_index": 0
+        }
+      ]
+    },
+    {
+      "question": "¿Cuál es la composición química de la atmósfera de Venus?",
+      "elapsed_seconds": 38.04,
+      "passed": true,
+      "answer": "No tengo suficiente información en mi base de conocimiento para responder esa pregunta.",
+      "sources": []
+    }
+  ]
+}

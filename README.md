@@ -732,15 +732,17 @@ añadido autenticación ni memoria conversacional.
 | `receive_question` | Inicializa los datos de esta ejecución sin reutilizar respuestas anteriores |
 | `validate_question` | Valida la pregunta incluso si se invoca el grafo directamente |
 | `retrieve_context` | Recupera Top-K fragmentos de PostgreSQL |
-| `grade_context` | Pregunta a Qwen si el contexto limitado permite contestar completamente |
-| `generate_answer` | Genera y valida la respuesta y sus referencias |
+| `grade_context` | Evalúa suficiencia y, en modo de una llamada, prepara la respuesta |
+| `generate_answer` | Valida el borrador y sus referencias; en modo de dos llamadas también lo genera |
 | `reject_question` | Devuelve la frase de rechazo exacta y fuentes vacías |
 | `save_interaction` | Registra el resultado en el estado de la ejecución actual |
 
 El grader devuelve un JSON con un booleano `sufficient`. Su decisión controla una
-arista condicional real del grafo. Si no hay contexto, no se invoca ni al evaluador ni al
-generador. Si hay contexto insuficiente, se evita la llamada al generador. El generador
-también puede rechazar aunque el grader haya aprobado el contexto.
+arista condicional real del grafo. Si no hay contexto, no se invoca al modelo.
+Por defecto, la misma llamada prepara un borrador cuando hay respaldo; el nodo
+`generate_answer` valida su estructura y referencias antes de publicarlo.
+Con `RAG_SINGLE_PASS=false`, se conserva la evaluación seguida de una segunda
+llamada para generar; esta también puede rechazar aunque el grader haya aprobado.
 
 `context_score` es la mayor similitud coseno (`1 - distance`) entre los fragmentos
 seleccionados: es diagnóstico, no una probabilidad ni un umbral de aceptación.
@@ -765,9 +767,36 @@ Desde `backend/`:
 
 Con Ollama y PostgreSQL activos, usa los ejemplos de la fase 6 en `/docs`.
 En la terminal aparecen los nodos de recuperación y evaluación, la ruta elegida y el
-registro final. Con contexto suficiente se hacen dos llamadas a Qwen (evaluación y
-generación), por lo que puede tardar más que la fase 6. `OLLAMA_TIMEOUT` se aplica
+registro final. Por defecto se hace una llamada a Qwen para evaluar y preparar
+la respuesta. Con `RAG_SINGLE_PASS=false` se hacen dos si hay contexto suficiente.
+`OLLAMA_TIMEOUT` se aplica
 a cada llamada, no a la duración completa del grafo.
+
+### Optimización de latencia (3 de octubre de 2026)
+
+Se conserva Qwen `qwen3:8b`, el endpoint y la recuperación de documentos. La evaluación
+y el borrador comparten una llamada para evitar procesar el mismo contexto dos veces.
+Las referencias siguen validándose en Python y un veredicto insuficiente devuelve el
+rechazo establecido. Esto no sustituye los controles y umbrales previstos para la fase 8.
+
+Configuración en `.env` (estos son los valores por defecto):
+
+```dotenv
+RAG_SINGLE_PASS=true
+RAG_MAX_OUTPUT_TOKENS=512
+RAG_KEEP_ALIVE=15m
+```
+
+El límite de salida favorece respuestas breves; si el modelo agota ese límite se
+devuelve un error explícito en lugar de aceptar JSON truncado. Puede aumentarse
+hasta 2048. `RAG_KEEP_ALIVE` solicita mantener el modelo cargado durante 15 minutos
+después de usarlo, consumiendo memoria mientras permanece cargado. Reinicia el backend
+para aplicar cambios. Para recuperar el flujo de dos llamadas, usa `RAG_SINGLE_PASS=false`.
+
+Los logs separan recuperación, carga del modelo, procesamiento del contexto y generación.
+Las mediciones y los comandos para repetirlas están en
+[`docs/performance/README.md`](docs/performance/README.md). En CPU todavía pueden
+transcurrir decenas de segundos; no se cachean respuestas ni se omite la búsqueda.
 
 La suite se ejecuta igual que en las fases anteriores. `tests/test_agent.py` verifica
 las ramas, el estado por ejecución, la validación, el rechazo posterior a generación,

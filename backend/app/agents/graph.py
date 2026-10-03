@@ -14,8 +14,8 @@ def route_answer(state: AgentState):
     return "reject_question" if state["status"] == "needs_rejection" else "save_interaction"
 
 
-def build_graph(retriever, llm, grader, interactions, max_context_chars=6000):
-    nodes = RAGNodes(retriever, llm, grader, interactions, max_context_chars)
+def build_graph(retriever, llm, grader, interactions, max_context_chars=6000, *, single_pass=False):
+    nodes = RAGNodes(retriever, llm, grader, interactions, max_context_chars, single_pass=single_pass)
     builder = StateGraph(AgentState)
     # Nodos: cada nombre representa una responsabilidad del flujo.
     for name in ("receive_question", "validate_question", "retrieve_context", "grade_context",

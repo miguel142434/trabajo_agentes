@@ -1,6 +1,8 @@
 """Generación asíncrona con Ollama, independiente de HTTP/FastAPI."""
 
 import asyncio
+import logging
+from time import perf_counter
 from functools import lru_cache
 
 import httpx
@@ -9,6 +11,8 @@ from langchain_core.messages import BaseMessage
 from ollama import ResponseError
 
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
@@ -40,6 +44,7 @@ class LLMService:
         )
 
     async def generate(self, prompt: str | list[BaseMessage]) -> str:
+        started = perf_counter()
         try:
             # También limita la duración total si Ollama sigue enviando tokens.
             async with asyncio.timeout(self.settings.ollama_timeout):
@@ -60,8 +65,19 @@ class LLMService:
         except httpx.RequestError as exc:
             raise LLMUnavailableError("Se interrumpió la comunicación con Ollama.") from exc
 
+        if message.response_metadata.get("done_reason") == "length":
+            raise LLMError("El modelo alcanzó el límite de salida. Aumenta RAG_MAX_OUTPUT_TOKENS para preguntas extensas.")
         if not isinstance(message.content, str) or not message.content.strip():
             raise LLMError("Ollama devolvió una respuesta vacía o no válida.")
+        metrics = message.response_metadata
+        logger.info(
+            "LLM model=%s elapsed=%.2fs load=%.2fs prompt_eval=%.2fs generation=%.2fs input_tokens=%s output_tokens=%s",
+            self.settings.ollama_model, perf_counter() - started,
+            (metrics.get("load_duration") or 0) / 1e9,
+            (metrics.get("prompt_eval_duration") or 0) / 1e9,
+            (metrics.get("eval_duration") or 0) / 1e9,
+            metrics.get("prompt_eval_count"), metrics.get("eval_count"),
+        )
         return message.content
 
 
