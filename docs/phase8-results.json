@@ -1,0 +1,56 @@
+{
+  "model": "qwen3:8b",
+  "threshold": 0.65,
+  "results": [
+    {
+      "case": "empty",
+      "question": "¿Qué selección ganó el Mundial de fútbol de 2022?",
+      "seconds": 1.87,
+      "status_code": 200,
+      "passed": true,
+      "response": {
+        "answer": "No tengo suficiente información en mi base de conocimiento para responder esa pregunta.",
+        "sources": []
+      }
+    },
+    {
+      "case": "documented",
+      "question": "¿Qué selección ganó el Mundial de fútbol de 2022?",
+      "seconds": 33.82,
+      "status_code": 200,
+      "passed": true,
+      "response": {
+        "answer": "Argentina ganó el Mundial de fútbol de 2022.",
+        "sources": [
+          {
+            "document": "phase8-mundial.txt",
+            "page": 1,
+            "chunk_index": 0
+          }
+        ]
+      }
+    },
+    {
+      "case": "partial",
+      "question": "¿Quién ganó el Mundial de 2022 y cuál era el salario exacto de su entrenador?",
+      "seconds": 7.36,
+      "status_code": 200,
+      "passed": true,
+      "response": {
+        "answer": "No tengo suficiente información en mi base de conocimiento para responder esa pregunta.",
+        "sources": []
+      }
+    },
+    {
+      "case": "unrelated",
+      "question": "¿Cuál es la composición química de la atmósfera de Venus?",
+      "seconds": 0.42,
+      "status_code": 200,
+      "passed": true,
+      "response": {
+        "answer": "No tengo suficiente información en mi base de conocimiento para responder esa pregunta.",
+        "sources": []
+      }
+    }
+  ]
+}

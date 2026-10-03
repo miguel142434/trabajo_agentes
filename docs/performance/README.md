@@ -1,5 +1,10 @@
 # Latencia del agente antes de la fase 8
 
+**Registro histórico:** las cifras siguientes preceden al filtro de relevancia.
+La fase 8 activa por defecto `RAG_SINGLE_PASS=false` para clasificar antes de generar.
+El script de benchmark actual aplica también `RAG_MIN_RELEVANCE_SCORE`; sus nuevas
+mediciones no reproducen exactamente esta versión histórica.
+
 Medición local del 3 de octubre de 2026, con `qwen3:8b` en CPU, PostgreSQL y
 Ollama reales. Se mantuvieron Top-K=4, contexto máximo de 6000 caracteres y
 ventana de 8192 tokens. No se descargó ni sustituyó el modelo.

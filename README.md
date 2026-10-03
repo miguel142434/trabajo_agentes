@@ -737,16 +737,16 @@ añadido autenticación ni memoria conversacional.
 | `reject_question` | Devuelve la frase de rechazo exacta y fuentes vacías |
 | `save_interaction` | Registra el resultado en el estado de la ejecución actual |
 
-El grader devuelve un JSON con un booleano `sufficient`. Su decisión controla una
+El grader devuelve un JSON con `classification: SUFFICIENT | INSUFFICIENT`. Su decisión controla una
 arista condicional real del grafo. Si no hay contexto, no se invoca al modelo.
-Por defecto, la misma llamada prepara un borrador cuando hay respaldo; el nodo
+En el modo opcional `RAG_SINGLE_PASS=true`, la misma llamada prepara un borrador cuando hay respaldo; el nodo
 `generate_answer` valida su estructura y referencias antes de publicarlo.
-Con `RAG_SINGLE_PASS=false`, se conserva la evaluación seguida de una segunda
+Con `RAG_SINGLE_PASS=false` (por defecto desde la fase 8), se conserva la evaluación seguida de una segunda
 llamada para generar; esta también puede rechazar aunque el grader haya aprobado.
 
 `context_score` es la mayor similitud coseno (`1 - distance`) entre los fragmentos
 seleccionados: es diagnóstico, no una probabilidad ni un umbral de aceptación.
-La fase 8 reforzará este control con umbrales y pruebas específicas de alucinaciones.
+La fase 8 filtra cada fragmento por similitud antes de construir el contexto.
 Los errores técnicos mantienen los handlers existentes: no se convierten en rechazos
 por falta de información.
 
@@ -767,8 +767,9 @@ Desde `backend/`:
 
 Con Ollama y PostgreSQL activos, usa los ejemplos de la fase 6 en `/docs`.
 En la terminal aparecen los nodos de recuperación y evaluación, la ruta elegida y el
-registro final. Por defecto se hace una llamada a Qwen para evaluar y preparar
-la respuesta. Con `RAG_SINGLE_PASS=false` se hacen dos si hay contexto suficiente.
+registro final. En fase 8, por defecto se hacen dos llamadas si hay contexto suficiente;
+ninguna si ningún fragmento supera el umbral. `RAG_SINGLE_PASS=true` es el modo
+alternativo de una llamada, sin clasificación independiente.
 `OLLAMA_TIMEOUT` se aplica
 a cada llamada, no a la duración completa del grafo.
 
@@ -779,7 +780,7 @@ y el borrador comparten una llamada para evitar procesar el mismo contexto dos v
 Las referencias siguen validándose en Python y un veredicto insuficiente devuelve el
 rechazo establecido. Esto no sustituye los controles y umbrales previstos para la fase 8.
 
-Configuración en `.env` (estos son los valores por defecto):
+Configuración de la optimización anterior a fase 8 (ahora el modo por defecto es `false`):
 
 ```dotenv
 RAG_SINGLE_PASS=true
@@ -840,6 +841,55 @@ Los tiempos corresponden al equipo local con Qwen ejecutándose en CPU; no son u
 garantía de latencia. Los casos probados no garantizan que el evaluador acierte siempre;
 la fase 8 reforzará el control de alucinaciones.
 
+## Fase 8 — Control de alucinaciones
+
+El agente aplica cuatro controles: filtro de similitud por fragmento, clasificación
+de suficiencia, prompt estricto y rechazo explícito. Las respuestas aceptadas mantienen
+las fuentes con `document`, `page` y `chunk_index`.
+
+```dotenv
+RAG_MIN_RELEVANCE_SCORE=0.65
+RAG_SINGLE_PASS=false
+```
+
+El score es `1 - distancia_coseno`, no una probabilidad. Solo se admiten fragmentos
+con score **mayor** que el umbral; los demás no llegan a Qwen ni se pueden citar.
+Si ninguno pasa, se rechaza sin invocar al LLM. El valor 0.65 es inicial y configurable,
+no universal: debe calibrarse al cambiar documentos o modelo de embeddings.
+
+El evaluador recibe exactamente el contexto filtrado y limitado y devuelve únicamente
+`{"classification":"SUFFICIENT"}` o `{"classification":"INSUFFICIENT"}`. Coincidir
+en tema no basta: todas las partes de la pregunta deben estar documentadas. Los prompts
+prohíben usar conocimiento externo, inferir hechos ausentes y obedecer instrucciones
+dentro de documentos o preguntas; ante dudas o contradicciones deben rechazar.
+
+El rechazo devuelve exactamente:
+
+```json
+{"answer":"No tengo suficiente información en mi base de conocimiento para responder esa pregunta.","sources":[]}
+```
+
+Los logs muestran número de chunks, scores, umbral, clasificación y ruta del grafo;
+no muestran el razonamiento del modelo. JSON inválido, referencias inventadas o errores
+de Ollama siguen siendo errores técnicos, no rechazos por falta de conocimiento.
+
+**Tiempo de respuesta:** la clasificación independiente exige dos llamadas cuando se
+responde. Se mantienen el límite de salida y keep-alive de la optimización anterior,
+y el filtro puede reducir el contexto. El modo `RAG_SINGLE_PASS=true` sigue disponible
+con filtro, pero combina evaluación y borrador y no cumple el requisito de clasificación
+independiente de esta fase. El modo estricto queda configurado en `.env` local.
+
+Para ejecutar desde `backend/`:
+
+```powershell
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+En `http://127.0.0.1:8000/docs`, usar `POST /api/chat/rag` con los casos de
+[`docs/phase8.md`](docs/phase8.md). Ese documento incluye archivos modificados,
+comandos de pruebas y limitaciones. Los controles reducen el riesgo de alucinaciones;
+no garantizan que Qwen siempre evalúe correctamente el respaldo documental.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
@@ -849,7 +899,7 @@ la fase 8 reforzará el control de alucinaciones.
 - [x] Fase 5 — Carga y procesamiento de documentos
 - [x] Fase 6 — RAG básico
 - [x] Fase 7 — Agente con LangGraph
-- [ ] Fase 8 — Control de alucinaciones
+- [x] Fase 8 — Control de alucinaciones
 - [ ] Fase 9 — Base de datos para historial
 - [ ] Fase 10 — Autenticación y seguridad
 - [ ] Fase 11 — Frontend React
