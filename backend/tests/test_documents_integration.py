@@ -1,3 +1,6 @@
+import asyncio
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID
 import os
 import tempfile
 import unittest
@@ -32,8 +35,9 @@ class DocumentIntegrationTests(unittest.TestCase):
             embeddings = EmbeddingService(settings)
             app.dependency_overrides[get_document_service] = lambda: DocumentService(settings, embeddings, store)
             app.dependency_overrides[get_vector_service] = lambda: VectorService(embeddings, store)
+            app.dependency_overrides[get_current_user] = lambda: USER_ID
             try:
-                with TestClient(app) as client:
+                with TestClient(app, backend_options={"loop_factory": asyncio.SelectorEventLoop}) as client:
                     self.assertEqual(client.get("/api/documents").json(), [])
                     ids = []
                     for filename, data in [
@@ -62,7 +66,7 @@ class DocumentIntegrationTests(unittest.TestCase):
                 with self.assertRaises(AppError):
                     store.add(uuid4(), [ChunkInput(content="bad vector")], [[1, 0]],
                               document={"filename": "fallo.txt", "file_type": "txt", "size_bytes": 10})
-                self.assertEqual(len(store.list_documents()), 3)
+                self.assertEqual(len(store.list_documents(user_id=USER_ID)), 3)
                 with store.connection() as conn:
                     row = conn.execute(sql.SQL("SELECT count(*) AS n FROM {}").format(store.table)).fetchone()
                     self.assertEqual(row["n"], 3)

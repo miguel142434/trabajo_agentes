@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MessageBase(BaseModel):
@@ -21,7 +21,7 @@ class MessageResponse(MessageBase):
 
 
 class ConversationBase(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=255)
 
 
 class ConversationCreate(ConversationBase):
@@ -38,7 +38,7 @@ class ConversationResponse(ConversationBase):
 
 
 class ConversationDetailResponse(ConversationResponse):
-    messages: List[MessageResponse] = []
+    messages: List[MessageResponse] = Field(default_factory=list)
 
 
 class DocumentHistoryResponse(BaseModel):

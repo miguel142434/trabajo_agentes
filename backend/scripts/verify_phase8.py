@@ -1,6 +1,8 @@
 """Prueba HTTP real de fase 8 en una tabla aislada; no modifica el corpus del usuario."""
 
 import json
+import asyncio
+from functools import partial
 from pathlib import Path
 import sys
 from time import perf_counter
@@ -13,6 +15,7 @@ from fastapi.testclient import TestClient
 from psycopg import Connection, sql
 
 from app.core.config import get_settings
+from app.core.security import get_current_user
 from app.main import app
 from app.schemas.rag import REFUSAL
 from app.schemas.vector import ChunkInput, VectorAddRequest
@@ -20,6 +23,7 @@ from app.services.embedding_service import EmbeddingService
 from app.services.rag_service import get_rag_service
 from app.services.vector_service import VectorService
 from app.vectorstore.postgres import PostgresVectorStore
+from tests.auth_helpers import USER_ID, MemoryInteractions
 
 
 def main():
@@ -31,9 +35,13 @@ def main():
     report = {'model': settings.ollama_model, 'threshold': settings.rag_min_relevance_score, 'results': []}
     output = Path(__file__).resolve().parents[2] / 'docs/phase8-results.json'
     get_rag_service.cache_clear()
+    # Este script mide Qwen, no autenticación ni historial (tienen pruebas separadas).
+    app.dependency_overrides[get_current_user] = lambda: USER_ID
     try:
         with patch('app.services.rag_service.get_settings', return_value=settings), \
-             patch('app.services.rag_service.get_vector_service', return_value=vector), TestClient(app) as client:
+             patch('app.services.rag_service.get_vector_service', return_value=vector), \
+             patch('app.services.rag_service.InteractionService', return_value=MemoryInteractions(persisted=True)), \
+             TestClient(app, backend_options={'loop_factory': asyncio.SelectorEventLoop}) as client:
             cases = [
                 ('empty', '¿Qué selección ganó el Mundial de fútbol de 2022?', False),
                 ('documented', '¿Qué selección ganó el Mundial de fútbol de 2022?', True),
@@ -43,7 +51,7 @@ def main():
             for case, question, supported in cases:
                 if case == 'documented':
                     # Usar el mismo event loop que las peticiones del TestClient.
-                    client.portal.call(vector.add, VectorAddRequest(chunks=[ChunkInput(
+                    client.portal.call(partial(vector.add, user_id=USER_ID), VectorAddRequest(chunks=[ChunkInput(
                         content='Argentina ganó el Mundial de fútbol de 2022 en Qatar. Lionel Messi fue el capitán de la selección argentina.',
                         filename='phase8-mundial.txt', page=1,
                     )]))
@@ -53,7 +61,7 @@ def main():
                 passed = response.status_code == 200 and (
                     ('Argentina' in body.get('answer', '') and body.get('sources') == [
                         {'document': 'phase8-mundial.txt', 'page': 1, 'chunk_index': 0}])
-                    if supported else body == {'answer': REFUSAL, 'sources': []})
+                    if supported else body.get('answer') == REFUSAL and body.get('sources') == [])
                 row = {'case': case, 'question': question, 'seconds': round(perf_counter()-started, 2),
                        'status_code': response.status_code, 'passed': passed, 'response': body}
                 report['results'].append(row)
@@ -61,6 +69,7 @@ def main():
                 print(json.dumps(row, ensure_ascii=True), flush=True)
     finally:
         get_rag_service.cache_clear()
+        app.dependency_overrides.pop(get_current_user, None)
         with Connection.connect(store._conninfo(), connect_timeout=5) as conn:
             conn.execute(sql.SQL('DROP TABLE IF EXISTS {}').format(sql.Identifier('public', settings.vector_table)))
     if not all(row['passed'] for row in report['results']):

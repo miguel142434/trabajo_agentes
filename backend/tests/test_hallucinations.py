@@ -1,3 +1,4 @@
+from tests.auth_helpers import MemoryInteractions
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -13,7 +14,7 @@ class HallucinationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.retriever = Mock(retrieve=AsyncMock(return_value=[match()]))
         self.llm = Mock(generate=AsyncMock())
-        self.service = RAGService(self.retriever, self.llm, min_relevance_score=0.65)
+        self.service = RAGService(self.retriever, self.llm, interactions=MemoryInteractions(), min_relevance_score=0.65)
 
     async def test_documented_question_and_filtered_source_mapping(self):
         excluded = match('excluded.txt', 'Texto que no debe llegar al modelo.')
@@ -49,14 +50,14 @@ class HallucinationTests(unittest.IsolatedAsyncioTestCase):
         self.llm.generate.assert_not_awaited()
 
     async def test_boundary_and_invalid_scores_are_rejected(self):
-        service = RAGService(self.retriever, self.llm, min_relevance_score=0.5)
+        service = RAGService(self.retriever, self.llm, interactions=MemoryInteractions(), min_relevance_score=0.5)
         for distance in (0.5, float('nan'), float('inf'), -0.1, 2.1):
             self.retriever.retrieve.return_value[0].distance = distance
             self.assertEqual((await service.answer('Pregunta')).answer, REFUSAL)
         self.llm.generate.assert_not_awaited()
 
     async def test_threshold_applies_to_single_pass_too(self):
-        service = RAGService(self.retriever, self.llm, single_pass=True, min_relevance_score=0.9)
+        service = RAGService(self.retriever, self.llm, interactions=MemoryInteractions(), single_pass=True, min_relevance_score=0.9)
         self.assertEqual((await service.answer('Pregunta')).answer, REFUSAL)
         self.llm.generate.assert_not_awaited()
 

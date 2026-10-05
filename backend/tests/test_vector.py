@@ -1,3 +1,5 @@
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID, CONVERSATION_ID, MemoryInteractions
 """Pruebas sin servicios externos para la capa vectorial."""
 
 import os
@@ -61,6 +63,7 @@ class VectorEndpointTests(unittest.TestCase):
         self.store.search.return_value = []
         service = VectorService(self.embeddings, self.store)
         app.dependency_overrides[get_vector_service] = lambda: service
+        app.dependency_overrides[get_current_user] = lambda: USER_ID
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -82,7 +85,7 @@ class VectorEndpointTests(unittest.TestCase):
         response = self.client.post("/api/vector/test-search", json={"query": "gato", "k": 2})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"results": []})
-        self.store.search.assert_called_once_with([1, 0, 0], 2)
+        self.store.search.assert_called_once_with([1, 0, 0], 2, user_id=USER_ID)
         self.embeddings.embed.assert_awaited_with(["gato"], query=True)
 
     def test_embedding_failure_never_writes(self):

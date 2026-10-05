@@ -1,3 +1,5 @@
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID, CONVERSATION_ID, MemoryInteractions
 """Pruebas del contrato HTTP y errores del proveedor, sin descargar modelos."""
 
 import asyncio
@@ -5,7 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import httpx
 from fastapi.testclient import TestClient
@@ -20,11 +22,15 @@ from app.services.llm_service import LLMService, get_llm_service
 
 class LLMEndpointTests(unittest.TestCase):
     def setUp(self):
+        startup = patch("app.main.init_db", new=AsyncMock())
+        startup.start()
+        self.addCleanup(startup.stop)
         self.env_patch = patch.dict(os.environ, {}, clear=True)
         self.env_patch.start()
         self.addCleanup(self.env_patch.stop)
         self.service = LLMService(Settings(_env_file=None, ollama_timeout=1))
         app.dependency_overrides[get_llm_service] = lambda: self.service
+        app.dependency_overrides[get_current_user] = lambda: USER_ID
         self.client = TestClient(app)
 
     def tearDown(self):

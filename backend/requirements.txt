@@ -29,7 +29,7 @@ python-docx==1.2.0
 langchain-text-splitters==1.1.2
 
 # Base de datos relacional
-SQLAlchemy==2.0.35
+SQLAlchemy[asyncio]==2.0.35
 
 
 # Autenticacion

@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -7,8 +8,9 @@ REFUSAL = "No tengo suficiente información en mi base de conocimiento para resp
 
 
 class RAGRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     question: str = Field(min_length=1, max_length=2000)
+    conversation_id: UUID | None = None
 
 
 class RAGSource(BaseModel):
@@ -20,6 +22,10 @@ class RAGSource(BaseModel):
 class RAGResponse(BaseModel):
     answer: str
     sources: list[RAGSource]
+
+
+class ChatResponse(RAGResponse):
+    conversation_id: UUID
 
 
 class GroundedAnswer(BaseModel):

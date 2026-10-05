@@ -15,16 +15,16 @@ class VectorService:
         self.embeddings = embeddings
         self.store = store
 
-    async def add(self, request):
+    async def add(self, request, *, user_id=None):
         vectors = await self.embeddings.embed([chunk.content for chunk in request.chunks])
         document_id = request.document_id or uuid4()
         # Ejecutar cada transacción fuera del event loop también funciona en Windows.
-        ids = await asyncio.to_thread(self.store.add, document_id, request.chunks, vectors)
+        ids = await asyncio.to_thread(self.store.add, document_id, request.chunks, vectors, user_id=user_id)
         return VectorAddResponse(document_id=document_id, ids=ids, chunks_created=len(ids))
 
-    async def search(self, request):
+    async def search(self, request, *, user_id=None):
         vectors = await self.embeddings.embed([request.query], query=True)
-        results = await asyncio.to_thread(self.store.search, vectors[0], request.k)
+        results = await asyncio.to_thread(self.store.search, vectors[0], request.k, user_id=user_id)
         return VectorSearchResponse(results=results)
 
 

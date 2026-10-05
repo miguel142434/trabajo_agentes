@@ -1,3 +1,5 @@
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID, CONVERSATION_ID, MemoryInteractions
 import json
 import unittest
 from unittest.mock import AsyncMock, Mock
@@ -24,8 +26,9 @@ class RAGTests(unittest.TestCase):
         self.retriever = Mock(retrieve=AsyncMock(return_value=[match(), match("otro.txt")]))
         self.llm = Mock(generate=AsyncMock(return_value=json.dumps({"answer": "Argentina.", "source_ids": [1]})))
         self.grader = Mock(grade=AsyncMock(return_value=ContextVerdict(classification="SUFFICIENT")))
-        self.service = RAGService(self.retriever, self.llm, grader=self.grader)
+        self.service = RAGService(self.retriever, self.llm, grader=self.grader, interactions=MemoryInteractions(persisted=True))
         app.dependency_overrides[get_rag_service] = lambda: self.service
+        app.dependency_overrides[get_current_user] = lambda: USER_ID
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -38,7 +41,7 @@ class RAGTests(unittest.TestCase):
     def test_answer_and_only_cited_sources(self):
         result = self.post()
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json(), {"answer": "Argentina.", "sources": [
+        self.assertEqual(result.json(), {"conversation_id": CONVERSATION_ID, "answer": "Argentina.", "sources": [
             {"document": "mundial.txt", "page": 3, "chunk_index": 2}]})
         messages = self.llm.generate.call_args.args[0]
         self.assertEqual(messages[0].type, "system")
@@ -47,16 +50,16 @@ class RAGTests(unittest.TestCase):
 
     def test_empty_database_skips_llm(self):
         self.retriever.retrieve.return_value = []
-        self.assertEqual(self.post().json(), {"answer": REFUSAL, "sources": []})
+        self.assertEqual(self.post().json(), {"answer": REFUSAL, "sources": [], "conversation_id": CONVERSATION_ID})
         self.llm.generate.assert_not_awaited()
 
     def test_refusal_without_sources(self):
         self.llm.generate.return_value = json.dumps({"answer": REFUSAL, "source_ids": [1]})
-        self.assertEqual(self.post("¿Cómo reparar un reactor nuclear?").json(), {"answer": REFUSAL, "sources": []})
+        self.assertEqual(self.post("¿Cómo reparar un reactor nuclear?").json(), {"answer": REFUSAL, "sources": [], "conversation_id": CONVERSATION_ID})
 
     def test_uncited_answer_is_rejected(self):
         self.llm.generate.return_value = json.dumps({"answer": "Una suposición", "source_ids": []})
-        self.assertEqual(self.post().json(), {"answer": REFUSAL, "sources": []})
+        self.assertEqual(self.post().json(), {"answer": REFUSAL, "sources": [], "conversation_id": CONVERSATION_ID})
 
     def test_invalid_output_or_invented_reference(self):
         for raw in ["no json", '{"answer":"x","source_ids":[0]}', '{"answer":"x","source_ids":[true]}', '{"answer":"x","source_ids":[3]}']:

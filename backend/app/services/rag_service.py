@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from app.agents.graph import build_graph
 from app.core.config import get_settings
-from app.schemas.rag import RAGResponse
+from app.schemas.rag import RAGResponse, ChatResponse
 from app.services.context_grader import ContextGrader, ContextAnswer
 from app.services.interaction_service import InteractionService
 from app.services.llm_service import LLMService
@@ -17,12 +17,17 @@ class RAGService:
         self.retriever = retriever
         self.llm = llm
         self.max_context_chars = max_context_chars
+        self.interactions = interactions or InteractionService()
         self.graph = build_graph(retriever, llm, grader or ContextGrader(llm),
-                                 interactions or InteractionService(), max_context_chars,
+                                 self.interactions, max_context_chars,
                                  single_pass=single_pass, min_relevance_score=min_relevance_score)
 
     async def answer(self, question, user_id=None, conversation_id=None):
+        await self.interactions.check_access(user_id, conversation_id)
         state = await self.graph.ainvoke({"question": question, "user_id": user_id, "conversation_id": conversation_id})
+        if state["interaction"]["persisted"]:
+            return ChatResponse(answer=state["answer"], sources=state["sources"],
+                                conversation_id=state["interaction"]["conversation_id"])
         return RAGResponse(answer=state["answer"], sources=state["sources"])
 
 

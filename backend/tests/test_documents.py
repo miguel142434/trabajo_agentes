@@ -1,3 +1,5 @@
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID, CONVERSATION_ID, MemoryInteractions
 import os
 import tempfile
 import unittest
@@ -27,6 +29,7 @@ class DocumentTests(unittest.TestCase):
         self.store.list_documents.return_value = []
         self.service = DocumentService(self.settings, self.embeddings, self.store)
         app.dependency_overrides[get_document_service] = lambda: self.service
+        app.dependency_overrides[get_current_user] = lambda: USER_ID
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -134,7 +137,7 @@ class DocumentTests(unittest.TestCase):
         result = self.client.get("/api/documents?limit=10&offset=20")
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json(), [])
-        self.store.list_documents.assert_called_with(10, 20)
+        self.store.list_documents.assert_called_with(10, 20, user_id=USER_ID)
         self.assertEqual(self.client.get("/api/documents?limit=0").status_code, 422)
         self.assertEqual(self.client.post("/api/documents/upload").status_code, 422)
 

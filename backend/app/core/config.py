@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     rag_single_pass: bool = False
     rag_max_output_tokens: int = Field(default=512, ge=64, le=2048)
     rag_keep_alive: str = "15m"
+    keycloak_url: HttpUrl = "http://localhost:8080"
+    keycloak_realm: str = Field(default="rag-agent", pattern=r"^[A-Za-z0-9_-]+$")
+    keycloak_client_id: str = "rag-frontend"
+    keycloak_audience: str = "account"
+
+    @property
+    def keycloak_issuer(self) -> str:
+        return f"{str(self.keycloak_url).rstrip('/')}/realms/{self.keycloak_realm}"
 
     @model_validator(mode="after")
     def validate_documents(self):

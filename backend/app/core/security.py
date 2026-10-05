@@ -1,51 +1,35 @@
-"""Autenticación y Seguridad."""
-
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+"""Tokens de Keycloak: firma, emisor, audiencia, cliente y sujeto estable."""
+from functools import lru_cache
+from uuid import UUID
 import jwt
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
+from starlette.concurrency import run_in_threadpool
+from app.core.config import get_settings
 
-# Configuración fija (luego vamos a sacarla de config.py, pero pa hacerlo más fácil, así de momento)
-KEYCLOAK_URL = "http://localhost:8080/realms/rag-agent"
-ALGORITHMS = ["RS256"]
-AUDIENCE = "account"
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().keycloak_issuer}/protocol/openid-connect/token")
 
-# Configuración OAuth2 para Swagger UI
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="http://localhost:8080/realms/rag-agent/protocol/openid-connect/token"
-)
+@lru_cache
+def get_jwks_client():
+    return PyJWKClient(f"{get_settings().keycloak_issuer}/protocol/openid-connect/certs", timeout=5)
 
-# Cliente para obtener las llaves públicas de Keycloak
-jwks_client = PyJWKClient(f"{KEYCLOAK_URL}/protocol/openid-connect/certs")
-
+def validate_token(token: str) -> str:
+    settings = get_settings()
+    try:
+        key = get_jwks_client().get_signing_key_from_jwt(token)
+        payload = jwt.decode(token, key.key, algorithms=["RS256"],
+            audience=settings.keycloak_audience, issuer=settings.keycloak_issuer,
+            options={"require": ["exp", "iat", "sub", "iss", "aud", "azp"]})
+        if payload["azp"] != settings.keycloak_client_id or payload.get("typ") != "Bearer":
+            raise ValueError("Cliente o tipo de token incorrecto")
+        return str(UUID(payload["sub"]))
+    except jwt.PyJWKClientConnectionError as exc:
+        raise HTTPException(503, "No se pudo consultar Keycloak.") from exc
+    except (jwt.PyJWTError, ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(401, "Credenciales inválidas o token expirado",
+                            headers={"WWW-Authenticate": "Bearer"}) from exc
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
-    """Dependencia para validar el token JWT y retornar el ID de usuario."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales inválidas o token expirado",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        # Obtenemos la llave pública correcta cogiendo en el header del token
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-        
-        # Validamos el token
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=ALGORITHMS,
-            audience=AUDIENCE,
-            options={"verify_aud": False} 
-        )
-        
-        username: str = payload.get("preferred_username")
-        if username is None:
-            raise credentials_exception
-            
-        return username
-        
-    except jwt.PyJWTError:
-        raise credentials_exception
-
+    # JWKS usa HTTP síncrono; ejecutarlo fuera del event loop.
+    return await run_in_threadpool(validate_token, token)

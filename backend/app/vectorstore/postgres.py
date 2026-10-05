@@ -54,6 +54,8 @@ class PostgresVectorStore:
                             metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb
                         )
                     """).format(self.table, sql.Literal(self.settings.embedding_dimension)))
+                    # Migración aditiva: los registros anteriores conservan propietario NULL.
+                    conn.execute(sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS owner_id TEXT").format(self.table))
                     cursor = conn.execute("""
                         SELECT format_type(a.atttypid, a.atttypmod) AS type
                         FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
@@ -88,48 +90,50 @@ class PostgresVectorStore:
                 vector_table TEXT NOT NULL
             )
         """).format(sql.Identifier("public", self.settings.document_table)))
+        conn.execute(sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS owner_id TEXT").format(
+            sql.Identifier("public", self.settings.document_table)))
 
-    def list_documents(self, limit=100, offset=0):
+    def list_documents(self, limit=100, offset=0, *, user_id=None):
         with self.connection() as conn:
             self._ensure_documents(conn)
             return conn.execute(sql.SQL("""
                 SELECT document_id, filename, file_type, size_bytes, chunks_created,
                        status, created_at, embedding_model
-                FROM {} WHERE vector_table = %s
+                FROM {} WHERE vector_table = %s AND owner_id IS NOT DISTINCT FROM %s
                 ORDER BY created_at DESC, document_id ASC LIMIT %s OFFSET %s
             """).format(sql.Identifier("public", self.settings.document_table)),
-                (self.settings.vector_table, limit, offset)).fetchall()
+                (self.settings.vector_table, user_id, limit, offset)).fetchall()
 
-    def add(self, document_id, chunks, vectors, *, document=None):
+    def add(self, document_id, chunks, vectors, *, document=None, user_id=None):
         ids = [uuid4() for _ in chunks]
         with self.connection() as conn:
             if document is not None:
                 self._ensure_documents(conn)
                 conn.execute(sql.SQL("""
                     INSERT INTO {} (document_id, filename, file_type, size_bytes, chunks_created,
-                                    embedding_model, vector_table)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    embedding_model, vector_table, owner_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """).format(sql.Identifier("public", self.settings.document_table)),
                     (document_id, document["filename"], document["file_type"], document["size_bytes"],
-                     len(chunks), self.settings.ollama_embedding_model, self.settings.vector_table))
+                     len(chunks), self.settings.ollama_embedding_model, self.settings.vector_table, user_id))
             with conn.cursor() as cursor:
                 cursor.executemany(sql.SQL("""
                     INSERT INTO {} (id, document_id, filename, page, chunk_index,
-                                    content, embedding, embedding_model, metadata)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    content, embedding, embedding_model, metadata, owner_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """).format(self.table), [
                     (chunk_id, document_id, chunk.filename, chunk.page, index,
-                     chunk.content, Vector(vector), self.settings.ollama_embedding_model, Jsonb(chunk.metadata))
+                     chunk.content, Vector(vector), self.settings.ollama_embedding_model, Jsonb(chunk.metadata), user_id)
                     for index, (chunk_id, chunk, vector) in enumerate(zip(ids, chunks, vectors, strict=True))
                 ])
         return ids
 
-    def search(self, vector, k):
+    def search(self, vector, k, *, user_id=None):
         with self.connection() as conn:
             cursor = conn.execute(sql.SQL("""
                 SELECT id, document_id, filename, page, chunk_index, content, metadata,
                        embedding <=> %s AS distance
-                FROM {} WHERE embedding_model = %s
+                FROM {} WHERE embedding_model = %s AND owner_id IS NOT DISTINCT FROM %s
                 ORDER BY distance ASC, id ASC LIMIT %s
-            """).format(self.table), (Vector(vector), self.settings.ollama_embedding_model, k))
+            """).format(self.table), (Vector(vector), self.settings.ollama_embedding_model, user_id, k))
             return cursor.fetchall()

@@ -42,7 +42,7 @@ class RAGNodes:
 
     async def retrieve_context(self, state: AgentState):
         started = perf_counter()
-        documents = await self.retriever.retrieve(state["question"])
+        documents = await self.retriever.retrieve(state["question"], user_id=state.get("user_id"))
         logger.info("retrieve_context: %s fragmentos, elapsed=%.2fs", len(documents), perf_counter() - started)
         return {"retrieved_documents": documents, "status": "retrieved"}
 

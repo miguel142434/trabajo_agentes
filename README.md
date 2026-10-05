@@ -890,6 +890,32 @@ En `http://127.0.0.1:8000/docs`, usar `POST /api/chat/rag` con los casos de
 comandos de pruebas y limitaciones. Los controles reducen el riesgo de alucinaciones;
 no garantizan que Qwen siempre evalúe correctamente el respaldo documental.
 
+## Fases 9 y 10 — Historial privado y autenticación
+
+El chat devuelve `conversation_id` y acepta ese ID en la siguiente pregunta para
+continuar el historial. Pregunta y respuesta se guardan juntas en PostgreSQL, con
+comprobación de propietario antes de consultar el modelo y antes de persistir.
+Continuar el historial no añade todavía memoria de turnos anteriores al prompt.
+
+Documentos, búsqueda vectorial y RAG se filtran por el `sub` del usuario autenticado.
+Los tokens se validan con firma, caducidad, emisor, audiencia y cliente. También
+`/api/test-llm` requiere autorización. El frontend continúa siendo el inicial.
+
+**Datos previos:** los documentos sin propietario se conservan pero hay que cargarlos
+con una cuenta para usarlos de forma privada. El historial antiguo basado en username
+puede recuperarse mediante una migración administrativa explícita, verificando el UUID
+del usuario en Keycloak; nunca se reasigna automáticamente por coincidencia de nombre.
+
+Después de instalar `requirements.txt`, en Windows se puede iniciar desde `backend/`:
+
+```powershell
+.venv\Scripts\python.exe run.py
+```
+
+Guía actualizada de configuración, migración, ejemplos y pruebas:
+[`docs/history-auth.md`](docs/history-auth.md). Los apartados anteriores describen
+la evolución histórica; los endpoints funcionales ahora requieren **Authorize**.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
@@ -900,8 +926,8 @@ no garantizan que Qwen siempre evalúe correctamente el respaldo documental.
 - [x] Fase 6 — RAG básico
 - [x] Fase 7 — Agente con LangGraph
 - [x] Fase 8 — Control de alucinaciones
-- [ ] Fase 9 — Base de datos para historial
-- [ ] Fase 10 — Autenticación y seguridad
+- [x] Fase 9 — Base de datos para historial
+- [x] Fase 10 — Autenticación y seguridad
 - [ ] Fase 11 — Frontend React
 - [ ] Fase 12 — Integración completa
 - [ ] Fase 13 — Docker Compose

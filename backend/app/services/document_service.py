@@ -22,7 +22,7 @@ class DocumentService:
         self.embeddings = embeddings
         self.store = store
 
-    async def upload(self, upload):
+    async def upload(self, upload, *, user_id=None):
         document_id = uuid4()
         async with self.storage.temporary(upload) as file:
             sections = await run_in_threadpool(self.extraction.extract, file)
@@ -35,11 +35,11 @@ class DocumentService:
             # Un único commit publica tanto el documento como todos sus fragmentos.
             await run_in_threadpool(self.store.add, document_id, chunks, vectors, document={
                 "filename": file.filename, "file_type": file.file_type, "size_bytes": file.size_bytes,
-            })
+            }, user_id=user_id)
             return DocumentUploadResponse(document_id=document_id, filename=file.filename, chunks_created=len(chunks))
 
-    async def list_documents(self, limit, offset):
-        return await run_in_threadpool(self.store.list_documents, limit, offset)
+    async def list_documents(self, limit, offset, *, user_id=None):
+        return await run_in_threadpool(self.store.list_documents, limit, offset, user_id=user_id)
 
 
 @lru_cache

@@ -1,3 +1,6 @@
+import asyncio
+from app.core.security import get_current_user
+from tests.auth_helpers import USER_ID
 """Prueba optativa real: TEST_VECTOR_INTEGRATION=1; usa una tabla temporal propia."""
 
 import os
@@ -23,8 +26,9 @@ class VectorIntegrationTests(unittest.TestCase):
         settings = get_settings().model_copy(update={"vector_table": table})
         store = PostgresVectorStore(settings)
         app.dependency_overrides[get_vector_service] = lambda: VectorService(EmbeddingService(settings), store)
+        app.dependency_overrides[get_current_user] = lambda: USER_ID
         try:
-            with TestClient(app) as client:
+            with TestClient(app, backend_options={"loop_factory": asyncio.SelectorEventLoop}) as client:
                 empty = client.post("/api/vector/test-search", json={"query": "animales"})
                 self.assertEqual(empty.status_code, 200, empty.text)
                 self.assertEqual(empty.json()["results"], [])

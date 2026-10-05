@@ -5,6 +5,7 @@ from typing import Annotated, AsyncGenerator
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.engine import URL
 
 from app.core.config import get_settings
 
@@ -13,7 +14,9 @@ settings = get_settings()
 if settings.database_url:
     db_url = settings.database_url.replace("postgresql://", "postgresql+psycopg://")
 else:
-    db_url = f"postgresql+psycopg://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+    db_url = URL.create("postgresql+psycopg", username=settings.postgres_user,
+                        password=settings.postgres_password, host=settings.postgres_host,
+                        port=settings.postgres_port, database=settings.postgres_db)
 
 engine = create_async_engine(
     db_url,

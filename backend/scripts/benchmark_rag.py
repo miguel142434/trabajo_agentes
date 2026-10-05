@@ -21,6 +21,7 @@ from app.services.llm_service import LLMService
 from app.services.rag_retriever import RAGRetriever
 from app.services.rag_service import RAGService
 from app.services.vector_service import get_vector_service
+from tests.auth_helpers import MemoryInteractions
 
 
 async def benchmark(args):
@@ -33,7 +34,8 @@ async def benchmark(args):
         llm.model.keep_alive = settings.rag_keep_alive
     service = RAGService(RAGRetriever(get_vector_service(), settings.rag_top_k), llm,
                          settings.rag_max_context_chars, single_pass=args.mode == "single",
-                         min_relevance_score=settings.rag_min_relevance_score)
+                         min_relevance_score=settings.rag_min_relevance_score,
+                         interactions=MemoryInteractions())
     cases = [
         ("¿Qué selección ganó el Mundial de fútbol de 2022?", "Argentina", "mundial-2022.txt"),
         ("¿Cuál es la composición química de la atmósfera de Venus?", None, None),
@@ -48,7 +50,7 @@ async def benchmark(args):
               "min_relevance_score": settings.rag_min_relevance_score, "results": []}
     for question, text, document in cases:
         started = perf_counter()
-        result = await service.answer(question)
+        result = await service.answer(question, user_id=args.user_id)
         passed = (result.answer == REFUSAL and not result.sources) if text is None else (
             text.casefold() in result.answer.casefold() and any(s.document == document for s in result.sources))
         row = {"question": question, "elapsed_seconds": round(perf_counter() - started, 2),
@@ -66,6 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=["two", "single"], required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--extended", action="store_true")
+    parser.add_argument("--user-id", help="UUID sub de Keycloak; sin él solo mide documentos históricos sin propietario.")
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     asyncio.run(benchmark(arguments))

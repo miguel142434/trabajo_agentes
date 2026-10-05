@@ -9,7 +9,7 @@ api_router = APIRouter(prefix="/api")
 
 # Rutas públicas
 api_router.include_router(health.router)
-api_router.include_router(llm.router)
+api_router.include_router(llm.router, dependencies=[Depends(get_current_user)])
 
 # Rutas protegidas
 api_router.include_router(vector.router, dependencies=[Depends(get_current_user)])

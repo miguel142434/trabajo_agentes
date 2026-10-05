@@ -1,3 +1,4 @@
+from tests.auth_helpers import MemoryInteractions
 import asyncio
 import json
 import unittest
@@ -17,7 +18,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         self.retriever = Mock(retrieve=AsyncMock(return_value=[match()]))
         self.llm = Mock(generate=AsyncMock(return_value=json.dumps({"answer": "Argentina", "source_ids": [1]})))
         self.grader = Mock(grade=AsyncMock(return_value=ContextVerdict(classification="SUFFICIENT")))
-        self.interactions = InteractionService()
+        self.interactions = MemoryInteractions()
         self.graph = build_graph(self.retriever, self.llm, self.grader, self.interactions)
 
     async def path(self):

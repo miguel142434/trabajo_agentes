@@ -1,69 +1,53 @@
-"""Registro de interacciones."""
-
+"""Historial transaccional y verificación de propietario."""
 import json
-from datetime import datetime, timezone
-
 from sqlalchemy import select
-
+from sqlalchemy.dialects.postgresql import insert
 from app.core.database import AsyncSessionLocal
-from app.models.domain import Conversation, Message, User
+from app.core.exceptions import AppError
+from app.models.domain import Conversation, Message, User, get_utc_now
 
+async def ensure_user(session, user_id):
+    await session.execute(insert(User).values(id=user_id, username=user_id)
+                          .on_conflict_do_nothing(index_elements=[User.id]))
 
 class InteractionService:
+    def __init__(self, sessions=AsyncSessionLocal):
+        self.sessions = sessions
+
+    async def check_access(self, user_id, conversation_id):
+        if not user_id:
+            raise AppError("Se requiere un usuario autenticado.", 401)
+        if conversation_id:
+            async with self.sessions() as session:
+                conv = await session.scalar(select(Conversation.id).where(
+                    Conversation.id == conversation_id, Conversation.user_id == user_id))
+                if conv is None:
+                    raise AppError("Conversación no encontrada.", 404)
+
     async def save(self, state):
-        user_id = state.get("user_id") or "anonymous"
+        user_id = state.get("user_id")
+        if not user_id:
+            raise AppError("Se requiere un usuario autenticado.", 401)
         conversation_id = state.get("conversation_id")
-        question = state.get("question")
-        answer = state.get("answer")
         sources = [source.model_dump() for source in state.get("sources", [])]
-        
-        async with AsyncSessionLocal() as session:
-            # Validar existencia de usuario
-            user = await session.get(User, user_id)
-            if not user:
-                user = User(id=user_id, username=user_id)
-                session.add(user)
-                await session.commit()
-            
-            # Validar o crear conversación
+        async with self.sessions() as session, session.begin():
+            await ensure_user(session, user_id)
             if conversation_id:
-                conv = await session.get(Conversation, conversation_id)
-                if not conv:
-                    conv = Conversation(id=conversation_id, user_id=user_id, title=question[:50])
-                    session.add(conv)
-                    await session.commit()
+                conv = await session.scalar(select(Conversation).where(
+                    Conversation.id == conversation_id, Conversation.user_id == user_id).with_for_update())
+                if conv is None:
+                    raise AppError("Conversación no encontrada.", 404)
             else:
-                conv = Conversation(user_id=user_id, title=question[:50])
+                conv = Conversation(user_id=user_id, title=state["question"][:50])
                 session.add(conv)
-                await session.commit()
+                await session.flush()
                 conversation_id = conv.id
-                
-            # Persistir mensaje del usuario
-            msg_user = Message(
-                conversation_id=conversation_id,
-                role="user",
-                content=question
-            )
-            session.add(msg_user)
-            
-            # Persistir respuesta del asistente
-            msg_assistant = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=answer,
-                sources=json.dumps(sources)
-            )
-            session.add(msg_assistant)
-            
-            await session.commit()
-
-        return {
-            "user_id": user_id,
-            "conversation_id": conversation_id,
-            "question": question,
-            "answer": answer,
-            "sources": sources,
-            "status": state.get("status"),
-            "persisted": True,
-        }
-
+            session.add_all([
+                Message(conversation_id=conversation_id, role="user", content=state["question"]),
+                Message(conversation_id=conversation_id, role="assistant", content=state["answer"],
+                        sources=json.dumps(sources, ensure_ascii=False)),
+            ])
+            conv.updated_at = get_utc_now()
+        return {"user_id": user_id, "conversation_id": conversation_id,
+                "question": state["question"], "answer": state["answer"], "sources": sources,
+                "status": state.get("status"), "persisted": True}
