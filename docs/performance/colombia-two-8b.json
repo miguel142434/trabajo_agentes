@@ -1,0 +1,33 @@
+{
+  "mode": "two",
+  "model": "qwen3:8b",
+  "top_k": 4,
+  "max_context_chars": 6000,
+  "num_ctx": 8192,
+  "min_relevance_score": 0.65,
+  "results": [
+    {
+      "question": "¿Cuál ha sido la mejor participación de Colombia en algún mundial?",
+      "elapsed_seconds": 212.8,
+      "passed": true,
+      "answer": "La mejor participación de Colombia ha sido llegar a cuartos de final en Brasil 2014.",
+      "sources": [
+        {
+          "document": "Base_Conocimiento_Mundiales_y_Deportes.pdf",
+          "page": 9,
+          "chunk_index": 25
+        },
+        {
+          "document": "Base_Conocimiento_Mundiales_y_Deportes.pdf",
+          "page": 6,
+          "chunk_index": 12
+        },
+        {
+          "document": "Base_Conocimiento_Mundiales_y_Deportes.pdf",
+          "page": 6,
+          "chunk_index": 11
+        }
+      ]
+    }
+  ]
+}

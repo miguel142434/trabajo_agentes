@@ -916,6 +916,26 @@ Guía actualizada de configuración, migración, ejemplos y pruebas:
 [`docs/history-auth.md`](docs/history-auth.md). Los apartados anteriores describen
 la evolución histórica; los endpoints funcionales ahora requieren **Authorize**.
 
+## Fase 11 — Interfaz de usuario
+
+Ya se puede usar el agente desde **http://localhost:5173**, con vistas de inicio de
+sesión, chat con fuentes, carga de documentos e historial. Usa React Router y Keycloak
+con Authorization Code + PKCE; las credenciales se introducen en Keycloak y los tokens
+se mantienen en memoria. Los errores y la expiración de sesión se manejan en una capa común.
+
+Con PostgreSQL, Keycloak, Ollama y el backend activos, desde otra terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+El cliente `rag-frontend` necesita las direcciones de retorno y el origen del frontend
+en Keycloak. La guía de configuración, uso, límites y pruebas está en
+[`docs/frontend.md`](docs/frontend.md). Las variables de Vite se configuran en
+`frontend/.env.local`, con `frontend/.env.example` como referencia.
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
@@ -928,7 +948,7 @@ la evolución histórica; los endpoints funcionales ahora requieren **Authorize*
 - [x] Fase 8 — Control de alucinaciones
 - [x] Fase 9 — Base de datos para historial
 - [x] Fase 10 — Autenticación y seguridad
-- [ ] Fase 11 — Frontend React
+- [x] Fase 11 — Frontend React
 - [ ] Fase 12 — Integración completa
 - [ ] Fase 13 — Docker Compose
 - [ ] Fase 14 — Testing

@@ -16,6 +16,8 @@ node_modules/
 dist/
 .npm
 *.tsbuildinfo
+playwright-report/
+test-results/
 
 # Environment
 .env

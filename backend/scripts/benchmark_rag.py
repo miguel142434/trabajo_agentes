@@ -29,9 +29,9 @@ async def benchmark(args):
     llm = LLMService(settings.model_copy(update={"ollama_temperature": 0}))
     llm.model.format = ContextAnswer.model_json_schema() if args.mode == "single" else "json"
     llm.model.num_ctx = 8192
-    if args.mode == "single":
-        llm.model.num_predict = settings.rag_max_output_tokens
-        llm.model.keep_alive = settings.rag_keep_alive
+    # Comparar con los mismos límites que utiliza la aplicación en ambos modos.
+    llm.model.num_predict = settings.rag_max_output_tokens
+    llm.model.keep_alive = settings.rag_keep_alive
     service = RAGService(RAGRetriever(get_vector_service(), settings.rag_top_k), llm,
                          settings.rag_max_context_chars, single_pass=args.mode == "single",
                          min_relevance_score=settings.rag_min_relevance_score,
@@ -45,6 +45,8 @@ async def benchmark(args):
             ("¿En qué Gran Premio aseguró Verstappen su cuarto título mundial?", "Vegas", "f1-2024.txt"),
             ("¿Quién ganó el Mundial de 2022 y cuál era el salario exacto de su entrenador?", None, None),
         ]
+    if args.question:
+        cases = [(args.question, args.expected_answer, args.expected_document)]
     report = {"mode": args.mode, "model": settings.ollama_model, "top_k": settings.rag_top_k,
               "max_context_chars": settings.rag_max_context_chars, "num_ctx": 8192,
               "min_relevance_score": settings.rag_min_relevance_score, "results": []}
@@ -69,6 +71,13 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--extended", action="store_true")
     parser.add_argument("--user-id", help="UUID sub de Keycloak; sin él solo mide documentos históricos sin propietario.")
+    parser.add_argument("--question", help="Medir una pregunta concreta en lugar de los ejemplos.")
+    parser.add_argument("--expected-answer", help="Texto que debe aparecer en la respuesta; omitir para esperar rechazo.")
+    parser.add_argument("--expected-document", help="Nombre de una fuente esperada para una respuesta respaldada.")
     arguments = parser.parse_args()
+    if bool(arguments.expected_answer) != bool(arguments.expected_document):
+        parser.error("--expected-answer y --expected-document deben proporcionarse juntos")
+    if arguments.expected_answer and not arguments.question:
+        parser.error("--expected-answer requiere --question")
     logging.basicConfig(level=logging.INFO)
     asyncio.run(benchmark(arguments))

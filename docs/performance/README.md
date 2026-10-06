@@ -1,5 +1,8 @@
 # Latencia del agente antes de la fase 8
 
+Medición posterior con el PDF personal y el filtro de fase 8:
+[optimización local del 6 de octubre de 2026](colombia-latency.md).
+
 **Registro histórico:** las cifras siguientes preceden al filtro de relevancia.
 La fase 8 activa por defecto `RAG_SINGLE_PASS=false` para clasificar antes de generar.
 El script de benchmark actual aplica también `RAG_MIN_RELEVANCE_SCORE`; sus nuevas
@@ -36,8 +39,8 @@ ejemplo ya indexados, ejecutar desde `backend/`, una prueba después de la otra:
 .venv\Scripts\python.exe scripts/benchmark_rag.py --mode single --extended --output ../docs/performance/local-single.json
 ```
 
-El modo `two` reproduce la configuración anterior sin límite explícito de salida
-ni keep-alive adicional. El modo `single` usa el esquema y opciones actuales.
+Ambos modos usan ahora el mismo límite de salida y keep-alive que la aplicación;
+`single` combina evaluación y respuesta usando un esquema JSON.
 El script invoca el servicio y el grafo reales, sin transporte HTTP. Guarda tiempos,
 respuestas, fuentes y comprobaciones básicas; retorna un error si alguna falla.
 Los logs de la terminal detallan carga, procesamiento y generación.
