@@ -59,6 +59,10 @@ class Settings(BaseSettings):
 
     document_table: str = Field(default="uploaded_documents", pattern=r"^[a-z][a-z0-9_]{0,62}$")
     upload_dir: Path = Path(__file__).resolve().parents[3] / "data" / "documents"
+    # Base de conocimiento global: archivos versionados en el repositorio que se
+    # indexan al arrancar y quedan disponibles para todos los usuarios.
+    knowledge_base_dir: Path = Path(__file__).resolve().parents[2] / "knowledge_base"
+    knowledge_base_seed_on_startup: bool = True
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
     max_document_chars: int = Field(default=2_000_000, ge=1)
     max_document_chunks: int = Field(default=3000, ge=1)

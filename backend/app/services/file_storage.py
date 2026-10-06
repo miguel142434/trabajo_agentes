@@ -10,6 +10,8 @@ from fastapi import UploadFile
 from app.core.config import Settings
 from app.core.exceptions import AppError
 
+ALLOWED_SUFFIXES = frozenset({".pdf", ".txt", ".docx"})
+
 
 @dataclass
 class StoredFile:
@@ -29,7 +31,7 @@ class FileStorage:
         if not filename or len(filename) > 255 or any(ord(c) < 32 for c in filename):
             raise AppError("Nombre de archivo no válido.", 422)
         suffix = Path(filename).suffix.lower()
-        if suffix not in {".pdf", ".txt", ".docx"}:
+        if suffix not in ALLOWED_SUFFIXES:
             raise AppError("Formato no permitido. Usa PDF, TXT o DOCX.", 415)
         if upload.size is not None and upload.size > self.settings.max_upload_bytes:
             raise AppError("El archivo supera MAX_UPLOAD_BYTES.", 413)

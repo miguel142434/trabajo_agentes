@@ -17,3 +17,5 @@ class DocumentInfo(DocumentUploadResponse):
     size_bytes: int
     created_at: datetime
     embedding_model: str
+    # True para la base de conocimiento global, compartida por todos los usuarios.
+    is_global: bool = False

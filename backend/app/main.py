@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,15 +14,26 @@ from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.database import init_db, engine
+from app.services.document_service import get_document_service
+from app.services.knowledge_base import KnowledgeBaseSeeder
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicializar base de datos
     await init_db()
+    # Precargar la base de conocimiento global sin bloquear el arranque.
+    seeding = None
+    if get_settings().knowledge_base_seed_on_startup:
+        seeder = KnowledgeBaseSeeder(get_settings(), get_document_service())
+        seeding = asyncio.create_task(seeder.sync_with_retries())
     try:
         yield
     finally:
+        if seeding is not None and not seeding.done():
+            seeding.cancel()
+            with suppress(asyncio.CancelledError):
+                await seeding
         await engine.dispose()
 
 
