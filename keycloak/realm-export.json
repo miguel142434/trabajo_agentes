@@ -1,0 +1,21 @@
+{
+  "realm": "rag-agent",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "rag-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:8000/docs/oauth2-redirect"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ]
+}
