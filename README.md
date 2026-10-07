@@ -27,6 +27,7 @@ trabajo_agentes/
 │   │   ├── services/      # Lógica de negocio
 │   │   ├── repositories/  # Acceso a datos
 │   │   └── vectorstore/   # Integración pgvector
+│   ├── knowledge_base/  # Base de conocimiento global precargada
 │   ├── tests/
 │   ├── requirements.txt
 │   └── Dockerfile
@@ -91,6 +92,28 @@ docker compose up --build
 
 - Backend: http://localhost:8000
 - Frontend: http://localhost:3000
+
+## Base de conocimiento global
+
+El agente arranca con una base de conocimiento por defecto, versionada en
+[`backend/knowledge_base/`](backend/knowledge_base/) (actualmente
+`Mundiales_documento_RAG.pdf`). No hay que descargar ni subir nada: al iniciar el
+backend (local o con Docker) se sincroniza automáticamente con PostgreSQL.
+
+- **Compartida y aditiva.** Los documentos globales se guardan con
+  `owner_id = 'system:global'`. Cada búsqueda combina los fragmentos del usuario
+  con los globales, así que lo que sube cada usuario *se suma* a la base por
+  defecto (y sigue siendo privado para su cuenta).
+- **Idempotente.** Se guarda la huella SHA-256 de cada archivo; si no cambió y el
+  modelo de embeddings es el mismo, no se vuelve a indexar. Si cambió, se reemplaza
+  en una sola transacción. Si se elimina un archivo de la carpeta, se borra de la base.
+- **No bloquea el arranque.** Se ejecuta en segundo plano con reintentos por si
+  PostgreSQL u Ollama aún no están listos. Revisa el log
+  `Base de conocimiento global sincronizada`.
+- **Agregar contenido global:** copia un PDF, TXT o DOCX a `backend/knowledge_base/`,
+  haz commit y reinicia el backend.
+- Variables: `KNOWLEDGE_BASE_DIR` (carpeta alternativa) y
+  `KNOWLEDGE_BASE_SEED_ON_STARTUP=false` (desactivar la precarga).
 
 ## Fase 2 — Ollama + Qwen
 
