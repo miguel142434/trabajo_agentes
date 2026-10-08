@@ -106,7 +106,7 @@ class PostgresVectorStore:
             self._ensure_documents(conn)
             return conn.execute(sql.SQL("""
                 SELECT document_id, filename, file_type, size_bytes, chunks_created,
-                       status, created_at, embedding_model, owner_id = %s AS is_global
+                       status, created_at, embedding_model, COALESCE(owner_id = %s, FALSE) AS is_global
                 FROM {} WHERE vector_table = %s
                   AND (owner_id IS NOT DISTINCT FROM %s OR owner_id = %s)
                 ORDER BY is_global DESC, created_at DESC, document_id ASC LIMIT %s OFFSET %s

@@ -972,7 +972,7 @@ en Keycloak. La guía de configuración, uso, límites y pruebas está en
 - [x] Fase 9 — Base de datos para historial
 - [x] Fase 10 — Autenticación y seguridad
 - [x] Fase 11 — Frontend React
-- [ ] Fase 12 — Integración completa
+- [x] Fase 12 — Integración completa (pruebas y checklist en [docs/phase12.md](docs/phase12.md))
 - [ ] Fase 13 — Docker Compose
 - [ ] Fase 14 — Testing
 - [ ] Fase 15 — Preparación para despliegue

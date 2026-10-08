@@ -76,7 +76,7 @@ async function setup(page, { ttl = 300 } = {}) {
     }
     return route.fulfill({ status: 404, headers, json: { detail: 'No se encontró la conversación.' } })
   })
-  return { requests, refreshes: () => refreshes, rejectSession: () => { sessionRejected = true } }
+  return { documents, requests, refreshes: () => refreshes, rejectSession: () => { sessionRejected = true } }
 }
 
 async function login(page) {
@@ -85,6 +85,20 @@ async function login(page) {
   await page.getByRole('button', { name: 'Iniciar sesión', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Hablemos de deportes' })).toBeVisible()
 }
+
+test('muestra biblioteca global junto a documentos personales', async ({ page }) => {
+  const fixture = await setup(page)
+  fixture.documents.push({ document_id: 'global-1', filename: 'mundiales-global.pdf', file_type: 'pdf',
+    chunks_created: 3, size_bytes: 100, created_at: '2026-10-08T12:00:00Z', status: 'processed', is_global: true })
+  await login(page)
+  await page.getByRole('link', { name: 'Documentos', exact: true }).click()
+  await expect(page.getByText('Global · siempre disponible', { exact: true })).toBeVisible()
+  await page.getByLabel('Seleccionar documento').setInputFiles({ name: 'mundial-2022.txt', mimeType: 'text/plain', buffer: Buffer.from('Argentina ganó el Mundial de 2022.') })
+  await page.getByRole('button', { name: 'Subir documento' }).click()
+  await expect(page.getByText('Listo para consultar', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'mundiales-global.pdf' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'mundial-2022.txt' })).toBeVisible()
+})
 
 test('protege rutas, inicia sesión con PKCE, muestra chat y cierra sesión', async ({ page }) => {
   await setup(page)

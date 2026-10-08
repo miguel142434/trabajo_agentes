@@ -160,6 +160,48 @@ class HistoryIsolationTests(unittest.IsolatedAsyncioTestCase):
         detail = await self.client.get('/api/conversations/'+response.json()['conversation_id'],headers=self.headers(self.a))
         self.assertEqual(len(detail.json()['messages']),2)
 
+    async def test_global_and_private_documents_remain_isolated_through_chat(self):
+        # Incluso con el mismo nombre, reemplazar/purgar el global no toca el privado.
+        name = 'compartido.txt'
+        document = {'filename': name, 'file_type': 'txt', 'size_bytes': 20, 'content_hash': 'v1'}
+        self.store.replace_global_document(uuid4(), [ChunkInput(filename=name, content='Dato global inicial')],
+                                           [[1, 0, 0]], document=document)
+        for subject, content in [(self.a, b'Privado A'), (self.b, b'Privado B')]:
+            response = await self.client.post('/api/documents/upload', headers=self.headers(subject),
+                                             files={'file': (name, content)})
+            self.assertEqual(response.status_code, 201, response.text)
+        self.store.add(uuid4(), [ChunkInput(content='Legacy secreto')], [[1, 0, 0]])
+        for subject, own, other in [(self.a, 'Privado A', 'Privado B'), (self.b, 'Privado B', 'Privado A')]:
+            listing = await self.client.get('/api/documents', headers=self.headers(subject))
+            self.assertEqual(listing.status_code, 200, listing.text)
+            self.assertEqual([d['is_global'] for d in listing.json()], [True, False])
+            search = await self.client.post('/api/vector/test-search', headers=self.headers(subject),
+                                           json={'query': 'dato', 'k': 10})
+            self.assertEqual({d['content'] for d in search.json()['results']}, {'Dato global inicial', own})
+            self.llm.generate.return_value = '{"sufficient":true,"answer":"Respuesta con fuentes","source_ids":[1,2]}'
+            answer = await self.client.post('/api/chat/rag', headers=self.headers(subject), json={'question': 'dato'})
+            self.assertEqual(answer.status_code, 200, answer.text)
+            self.assertEqual(len(answer.json()['sources']), 2)
+            prompt = self.llm.generate.await_args.args[0][-1].content
+            self.assertIn('Dato global inicial', prompt)
+            self.assertIn(own, prompt)
+            self.assertNotIn(other, prompt)
+            self.assertNotIn('Legacy secreto', prompt)
+            cid = answer.json()['conversation_id']
+            history = await self.client.get('/api/conversations/' + cid, headers=self.headers(subject))
+            self.assertEqual(len(history.json()['messages']), 2)
+            foreign = self.b if subject == self.a else self.a
+            self.assertEqual((await self.client.get('/api/conversations/' + cid,
+                             headers=self.headers(foreign))).status_code, 404)
+        self.assertTrue(self.store.global_document_is_current(name, 'v1'))
+        self.store.replace_global_document(uuid4(), [ChunkInput(filename=name, content='Dato global actualizado')],
+                                           [[1, 0, 0]], document={**document, 'content_hash': 'v2'})
+        self.assertFalse(self.store.global_document_is_current(name, 'v1'))
+        self.assertTrue(self.store.global_document_is_current(name, 'v2'))
+        self.assertEqual(self.store.prune_global_documents([]), 1)
+        for subject, own in [(self.a, 'Privado A'), (self.b, 'Privado B')]:
+            self.assertEqual([r['content'] for r in self.store.search([1, 0, 0], 10, user_id=subject)], [own])
+
     async def test_explicit_legacy_migration_preserves_messages(self):
         async with self.sessions() as session, session.begin():
             session.add(User(id='legacy-test',username='legacy-test'))

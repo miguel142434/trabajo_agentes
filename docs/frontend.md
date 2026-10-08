@@ -1,5 +1,9 @@
 # Fase 11 — Interfaz React
 
+Actualización de fase 12: el agente consulta la biblioteca común y los documentos
+personales; la primera aparece marcada como global en Documentos. La revisión de
+integración, evidencia y checklist manual están en [phase12.md](phase12.md).
+
 El frontend permite iniciar sesión, consultar el agente, cargar documentos y abrir
 conversaciones guardadas. Usa React, React Router, Vite y `fetch`, con una capa API
 compartida y el adaptador oficial `keycloak-js`. La interfaz está en español y se
