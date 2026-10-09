@@ -12,7 +12,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().keycloak_issuer}
 
 @lru_cache
 def get_jwks_client():
-    return PyJWKClient(f"{get_settings().keycloak_issuer}/protocol/openid-connect/certs", timeout=5)
+    return PyJWKClient(get_settings().keycloak_jwks_uri, timeout=5)
 
 def validate_token(token: str) -> str:
     settings = get_settings()

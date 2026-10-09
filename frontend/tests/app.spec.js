@@ -120,7 +120,7 @@ test('sube documento, pregunta, cita fuentes y continúa desde historial', async
   await expect(page.getByText('Tu biblioteca empieza aquí')).toBeVisible()
   await page.getByLabel('Seleccionar documento').setInputFiles({ name: 'mundial-2022.txt', mimeType: 'text/plain', buffer: Buffer.from('Argentina ganó el Mundial de 2022.') })
   await page.getByRole('button', { name: 'Subir documento' }).click()
-  await expect(page.getByText('Listo para consultar')).toBeVisible()
+  await expect(page.getByText('Listo para consultar', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Cerrar aviso' }).click()
   await page.getByRole('link', { name: 'Chat', exact: true }).click()
   await page.getByLabel('Tu pregunta').fill('¿Quién ganó el Mundial de 2022?')

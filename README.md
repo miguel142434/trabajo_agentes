@@ -84,14 +84,36 @@ npm run dev
 
 El frontend estará disponible en: **http://localhost:5173**
 
-### Docker Compose
+### Docker Compose (Todo el sistema en contenedores)
+
+Docker Compose levanta todos los componentes de la arquitectura conectándolos automáticamente entre sí:
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-- Backend: http://localhost:8000
-- Frontend: http://localhost:3000
+#### Servicios levantados:
+- **Frontend:** `http://localhost:3000` (Nginx sirviendo la aplicación React construida para producción).
+- **Backend:** `http://localhost:8000` (API FastAPI con Uvicorn).
+- **Keycloak:** `http://localhost:8080` (Servidor de autenticación OIDC con realm `rag-agent` y volumen persistente).
+- **PostgreSQL:** `127.0.0.1:5432` / `5433` (Base de datos relacional y vectorial con extensión `pgvector`).
+- **Ollama:** Se ejecuta en el host local (`http://host.docker.internal:11434`) para aprovechar directamente la aceleración de hardware del sistema.
+
+#### Comandos útiles de Docker Compose:
+```bash
+# Ver estado de los contenedores
+docker compose ps
+
+# Ver logs en tiempo real (todos los servicios o uno específico)
+docker compose logs -f
+docker compose logs -f backend
+
+# Detener los servicios conservando volúmenes de datos
+docker compose down
+
+# Detener y reiniciar reconstruyendo imágenes
+docker compose up --build -d
+```
 
 ## Base de conocimiento global
 
@@ -959,6 +981,31 @@ en Keycloak. La guía de configuración, uso, límites y pruebas está en
 [`docs/frontend.md`](docs/frontend.md). Las variables de Vite se configuran en
 `frontend/.env.local`, con `frontend/.env.example` como referencia.
 
+## Troubleshooting (Docker Compose)
+
+### 1. Error de conexión con Ollama desde el contenedor backend
+- **Síntoma:** El log de backend muestra `No se pudo conectar con Ollama` o error 503/504.
+- **Causa:** Ollama no está escuchando en el host o `host.docker.internal` no resuelve.
+- **Solución:**
+  1. Asegúrate de que Ollama esté ejecutándose en tu equipo (`ollama list`).
+  2. En Windows/Mac, `host.docker.internal` funciona automáticamente. En Linux, `docker-compose.yml` ya incluye `extra_hosts: ["host.docker.internal:host-gateway"]`.
+  3. Si Ollama solo escucha en `127.0.0.1`, configúralo para escuchar en todas las interfaces estableciendo la variable de entorno de Ollama: `OLLAMA_HOST=0.0.0.0`.
+
+### 2. Conflicto de puertos al levantar (`bind: address already in use`)
+- **Síntoma:** Docker arroja error al enlazar los puertos 8000, 3000, 8080 o 5432/5433.
+- **Solución:**
+  - Si tienes corriendo localmente procesos de pruebas anteriores (ej. `uvicorn` en 8000 o `vite` en 5173/3000), ciérralos con Ctrl+C.
+  - Revisa puertos en uso: en Windows PowerShell ejecuta `Get-NetTCPConnection -LocalPort 8000,3000,8080,5433`.
+  - Puedes cambiar los puertos de enlace del host en el archivo `.env` mediante `BACKEND_PORT`, `FRONTEND_PORT` o `POSTGRES_PORT`.
+
+### 3. Redirección inválida en Keycloak (`Invalid parameter: redirect_uri`)
+- **Síntoma:** Al abrir `http://localhost:3000`, Keycloak muestra pantalla de error indicando que la URI de redirección no es válida.
+- **Solución:**
+  - El archivo `keycloak/realm-export.json` ya incluye autorizaciones para `http://localhost:3000/*` y `http://127.0.0.1:3000/*`.
+  - Si usas un realm previamente inicializado en un volumen existente, entra a la consola de administración en `http://localhost:8080/admin`, ve a **Clients** -> `rag-frontend` y añade `http://localhost:3000/*` en **Valid redirect URIs** y `http://localhost:3000` en **Web origins**.
+
+---
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
@@ -973,7 +1020,7 @@ en Keycloak. La guía de configuración, uso, límites y pruebas está en
 - [x] Fase 10 — Autenticación y seguridad
 - [x] Fase 11 — Frontend React
 - [x] Fase 12 — Integración completa (pruebas y checklist en [docs/phase12.md](docs/phase12.md))
-- [ ] Fase 13 — Docker Compose
+- [x] Fase 13 — Docker Compose (detalles y arquitectura en [docs/phase13.md](docs/phase13.md))
 - [ ] Fase 14 — Testing
 - [ ] Fase 15 — Preparación para despliegue
 

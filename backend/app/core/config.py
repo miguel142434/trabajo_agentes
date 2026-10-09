@@ -34,7 +34,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: list[str] = Field(default_factory=lambda: [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:3000", "http://127.0.0.1:3000",
+    ])
 
     # ------------------------------------------------------------------
     # Ollama / LLM (Fase 2)
@@ -78,10 +81,20 @@ class Settings(BaseSettings):
     keycloak_realm: str = Field(default="rag-agent", pattern=r"^[A-Za-z0-9_-]+$")
     keycloak_client_id: str = "rag-frontend"
     keycloak_audience: str = "account"
+    keycloak_issuer_override: str | None = None
+    keycloak_jwks_url: str | None = None
 
     @property
     def keycloak_issuer(self) -> str:
+        if self.keycloak_issuer_override:
+            return self.keycloak_issuer_override
         return f"{str(self.keycloak_url).rstrip('/')}/realms/{self.keycloak_realm}"
+
+    @property
+    def keycloak_jwks_uri(self) -> str:
+        if self.keycloak_jwks_url:
+            return self.keycloak_jwks_url
+        return f"{str(self.keycloak_url).rstrip('/')}/realms/{self.keycloak_realm}/protocol/openid-connect/certs"
 
     @model_validator(mode="after")
     def validate_documents(self):
