@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Runner de pruebas; las clases unittest existentes también se ejecutan con pytest.
+pytest==8.3.5

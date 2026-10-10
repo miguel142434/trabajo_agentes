@@ -1006,6 +1006,22 @@ en Keycloak. La guía de configuración, uso, límites y pruebas está en
 
 ---
 
+## Fase 14 — Pruebas con pytest
+
+Desde `backend/`:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest -m unit -q
+# Con PostgreSQL y Ollama activos:
+.venv\Scripts\python.exe -m pytest -m integration --run-integration -q
+```
+
+Se reutilizan las pruebas existentes con dos marcadores: `unit` e `integration`.
+Las integraciones se habilitan explícitamente y usan tablas aisladas. Resultado
+de fase 14: **82 pruebas aisladas y 6 de integración aprobadas**. Casos, resultados,
+dependencias y límites en [docs/test-cases.md](docs/test-cases.md).
+
 ## Estado del Proyecto
 
 - [x] Fase 1 — Estructura inicial
@@ -1021,7 +1037,7 @@ en Keycloak. La guía de configuración, uso, límites y pruebas está en
 - [x] Fase 11 — Frontend React
 - [x] Fase 12 — Integración completa (pruebas y checklist en [docs/phase12.md](docs/phase12.md))
 - [x] Fase 13 — Docker Compose (detalles y arquitectura en [docs/phase13.md](docs/phase13.md))
-- [ ] Fase 14 — Testing
+- [x] Fase 14 — Testing (pytest y resultados en [docs/test-cases.md](docs/test-cases.md))
 - [ ] Fase 15 — Preparación para despliegue
 
 

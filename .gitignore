@@ -41,6 +41,8 @@ data/documents/*
 !data/documents/.gitkeep
 
 # Coverage
+.pytest_cache/
+backend/test-results/
 htmlcov/
 .coverage
 .coverage.*
