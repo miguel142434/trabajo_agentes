@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     keycloak_audience: str = "account"
     keycloak_issuer_override: str | None = None
     keycloak_jwks_url: str | None = None
+    keycloak_jwks_json: str | None = None
 
     @property
     def keycloak_issuer(self) -> str:

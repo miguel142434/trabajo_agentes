@@ -14,10 +14,21 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().keycloak_issuer}
 def get_jwks_client():
     return PyJWKClient(get_settings().keycloak_jwks_uri, timeout=5)
 
+def get_signing_key(token: str):
+    settings = get_settings()
+    if settings.keycloak_jwks_json:
+        try:
+            jwk_set = jwt.PyJWKSet.from_json(settings.keycloak_jwks_json)
+            kid = jwt.get_unverified_header(token).get("kid")
+            return jwk_set[kid]
+        except Exception as exc:
+            raise HTTPException(401, "Token no válido o firma no reconocida.") from exc
+    return get_jwks_client().get_signing_key_from_jwt(token)
+
 def validate_token(token: str) -> str:
     settings = get_settings()
     try:
-        key = get_jwks_client().get_signing_key_from_jwt(token)
+        key = get_signing_key(token)
         payload = jwt.decode(token, key.key, algorithms=["RS256"],
             audience=settings.keycloak_audience, issuer=settings.keycloak_issuer,
             options={"require": ["exp", "iat", "sub", "iss", "aud", "azp"]})
