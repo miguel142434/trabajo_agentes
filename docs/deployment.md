@@ -201,7 +201,7 @@ Keycloak requiere típicamente entre 512 MB y 1 GB de RAM al iniciar la JVM de Q
 ## 8. Instrucciones Paso a Paso para el Despliegue
 
 ### Paso 1: Crear la Base de Datos Gratuita en Neon.tech
-1. Ingresa a [https://neon.tech](https://neon.tech) e inicia sesión (con GitHub o Google, sin tarjeta).
+1. Ingresa a [https://neon.com](https://neon.com) e inicia sesión (con GitHub o Google, sin tarjeta).
 2. Crea un proyecto gratuito (ej. `rag-agent-db`).
 3. Copia el **Connection String** que tiene el formato:
    `postgresql://alex:AbCdEf@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require`
