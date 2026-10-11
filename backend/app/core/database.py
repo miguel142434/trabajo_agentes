@@ -12,7 +12,9 @@ from app.core.config import get_settings
 settings = get_settings()
 
 if settings.database_url:
-    db_url = settings.database_url.replace("postgresql://", "postgresql+psycopg://")
+    # Neon incluye a veces el subdominio '-pooler.' que restringe ciertas sentencias preparadas;
+    # usar el endpoint directo garantiza compatibilidad con psycopg async y SQLAlchemy.
+    db_url = settings.database_url.replace("postgresql://", "postgresql+psycopg://").replace("-pooler.", ".")
 else:
     db_url = URL.create("postgresql+psycopg", username=settings.postgres_user,
                         password=settings.postgres_password, host=settings.postgres_host,

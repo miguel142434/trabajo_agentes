@@ -27,7 +27,10 @@ class PostgresVectorStore:
     def _conninfo(self):
         if self.settings.database_url:
             # Aceptar la URL del plan de desarrollo y las URI nativas de PostgreSQL.
-            return self.settings.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            # Neon incluye a veces el subdominio '-pooler.' que no admite opciones de startup;
+            # usar el host directo garantiza compatibilidad total con statement_timeout y bloqueos.
+            url = self.settings.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            return url.replace("-pooler.", ".")
         return make_conninfo(
             host=self.settings.postgres_host, port=self.settings.postgres_port,
             dbname=self.settings.postgres_db, user=self.settings.postgres_user,
