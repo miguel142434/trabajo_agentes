@@ -14,10 +14,13 @@ from app.core.exceptions import AppError
 class EmbeddingService:
     def __init__(self, settings: Settings):
         self.settings = settings
+        client_kwargs: dict = {"timeout": settings.ollama_timeout}
+        if settings.ollama_api_key:
+            client_kwargs["headers"] = {"Authorization": f"Bearer {settings.ollama_api_key}"}
         self.model = OllamaEmbeddings(
             model=settings.ollama_embedding_model,
             base_url=str(settings.ollama_base_url),
-            client_kwargs={"timeout": settings.ollama_timeout},
+            client_kwargs=client_kwargs,
         )
 
     async def embed(self, texts: list[str], *, query: bool = False) -> list[list[float]]:

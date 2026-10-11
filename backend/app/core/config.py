@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, HttpUrl, model_validator
+from pydantic import Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,15 +35,35 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
-    cors_origins: list[str] = Field(default_factory=lambda: [
+    cors_origins: list[str] | str = Field(default_factory=lambda: [
         "http://localhost:5173", "http://127.0.0.1:5173",
         "http://localhost:3000", "http://127.0.0.1:3000",
     ])
 
+    @field_validator("cors_origins", mode="after")
+    @classmethod
+    def assemble_cors_origins(cls, v: list[str] | str) -> list[str]:
+        if isinstance(v, str):
+            v_str = v.strip()
+            if not v_str:
+                return []
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    parsed = json.loads(v_str)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v_str.split(",") if origin.strip()]
+        if isinstance(v, (list, tuple, set)):
+            return [str(origin).strip() for origin in v if str(origin).strip()]
+        return v
+
     # ------------------------------------------------------------------
-    # Ollama / LLM (Fase 2)
+    # Ollama / LLM (Fase 2 y Fase 15: túnel seguro con autenticación)
     # ------------------------------------------------------------------
     ollama_base_url: HttpUrl = "http://localhost:11434"
+    ollama_api_key: str | None = Field(default=None, repr=False)
     ollama_model: str = Field(default="qwen3:8b", min_length=1)
     ollama_temperature: float = Field(default=0, ge=0, le=2, allow_inf_nan=False)
     ollama_timeout: float = Field(default=120, gt=0, allow_inf_nan=False)

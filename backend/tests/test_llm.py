@@ -162,6 +162,19 @@ class SettingsTests(unittest.TestCase):
             settings = Settings(_env_file=None)
         self.assertEqual(settings.cors_origins, ["http://localhost:5173", "http://localhost:3000"])
 
+    def test_cors_from_environment_comma_separated(self):
+        with patch.dict(os.environ, {"CORS_ORIGINS": "https://myapp.vercel.app, http://localhost:5173"}):
+            settings = Settings(_env_file=None)
+        self.assertEqual(settings.cors_origins, ["https://myapp.vercel.app", "http://localhost:5173"])
+
+    def test_ollama_api_key_header_forwarding(self):
+        settings = Settings(_env_file=None, ollama_api_key="secret-token-xyz")
+        llm_service = LLMService(settings)
+        self.assertEqual(
+            llm_service.model.client_kwargs.get("headers"),
+            {"Authorization": "Bearer secret-token-xyz"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,13 +34,16 @@ class LLMTimeoutError(LLMError):
 class LLMService:
     def __init__(self, settings: Settings):
         self.settings = settings
+        client_kwargs: dict = {"timeout": settings.ollama_timeout}
+        if settings.ollama_api_key:
+            client_kwargs["headers"] = {"Authorization": f"Bearer {settings.ollama_api_key}"}
         self.model = ChatOllama(
             base_url=str(settings.ollama_base_url),
             model=settings.ollama_model,
             temperature=settings.ollama_temperature,
             # Qwen3 devuelve directamente la respuesta en este endpoint de prueba.
             reasoning=False,
-            client_kwargs={"timeout": settings.ollama_timeout},
+            client_kwargs=client_kwargs,
         )
 
     async def generate(self, prompt: str | list[BaseMessage]) -> str:
