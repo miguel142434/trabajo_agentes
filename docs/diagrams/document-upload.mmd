@@ -1,0 +1,26 @@
+flowchart TD
+    A["React: PDF, TXT o DOCX"] --> API["POST /api/documents/upload con JWT"]
+    API --> USER["Validar token y obtener sub"]
+    USER --> CHECK["Validar nombre, extensión, tamaño y contenido no vacío"]
+    CHECK --> TMP["Crear archivo temporal con UUID"]
+    TMP --> EX["Extraer texto: pypdf, python-docx o TXT UTF-8"]
+    EX --> CH["Dividir texto y conservar metadatos; validar límites"]
+    CH --> EM["Embeddings por lotes de hasta 32 fragmentos"]
+    EM --> DB["Una transacción: uploaded_documents y document_chunks con owner_id = sub"]
+    DB --> CLEAN["Eliminar temporal al salir del contexto"]
+    CLEAN --> RES["201: document_id, filename, chunks_created y status processed"]
+    RES --> LIST["Actualizar listado: propios más globales"]
+    TMP -.->|"Fallo posterior"| FAIL["Propagar error y limpiar el temporal"]
+    DB -.->|"Fallo de persistencia"| ROLL["Rollback; no publicar documento parcial"]
+    ROLL --> FAIL
+    subgraph GLOBAL["Biblioteca global: tarea de inicio independiente"]
+        START["Lifespan crea tarea de sincronización"] --> FILE["Leer backend/knowledge_base"]
+        FILE --> HASH["Comparar SHA-256 y modelo de embeddings"]
+        HASH --> SAME{"¿Ya indexado sin cambios?"}
+        SAME -->|"Sí"| SKIP["Omitir archivo"]
+        SAME -->|"No"| PREP["Misma extracción, fragmentación y embeddings"]
+        PREP --> REPLACE["Reemplazo transaccional con owner_id = system:global"]
+        SKIP --> PRUNE["Retirar globales cuyos archivos ya no existen"]
+        REPLACE --> PRUNE
+    end
+    PRUNE --> LIST

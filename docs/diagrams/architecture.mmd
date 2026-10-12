@@ -1,0 +1,37 @@
+flowchart LR
+    U["Usuario"] --> UI["React en navegador"]
+    N["Nginx :3000 o Vite :5173"] -->|"Sirve SPA"| UI
+    UI <-->|"Login, PKCE, renovación y logout"| K["Keycloak :8080"]
+    UI <-->|"HTTP con Bearer JWT"| API["FastAPI :8000"]
+    subgraph BACK["Backend"]
+        API --> SEC["Validar JWT y obtener sub"]
+        SEC --> RAG["RAGService y LangGraph"]
+        SEC --> DOC["DocumentService"]
+        SEC --> HIST["Rutas de historial"]
+        RAG --> VEC["Retriever y almacén vectorial"]
+        RAG --> LLM["Evaluador y generador"]
+        RAG --> SAVE["InteractionService"]
+        VEC --> EMB["EmbeddingService"]
+        DOC --> EMB
+        DOC --> STORE["PostgresVectorStore"]
+        SEED["KnowledgeBaseSeeder al arrancar"] --> DOC
+    end
+    FILES["backend/knowledge_base"] --> SEED
+    SEC -.->|"JWKS remoto si no hay JSON configurado"| K
+    JWKS["KEYCLOAK_JWKS_JSON opcional"] -.-> SEC
+    subgraph PG["Un PostgreSQL con pgvector"]
+        CH["document_chunks: texto, vectores y owner_id"]
+        CAT["uploaded_documents: catálogo"]
+        SQL["users, conversations y messages"]
+    end
+    STORE --> CH
+    STORE --> CAT
+    VEC -->|"Lectura: usuario más global"| CH
+    HIST --> SQL
+    SAVE -->|"Transacción pregunta y respuesta"| SQL
+    subgraph O["Ollama en el anfitrión :11434"]
+        E["nomic-embed-text"]
+        Q["qwen3:8b"]
+    end
+    EMB <-->|"Embeddings"| E
+    LLM <-->|"Evaluación y generación"| Q

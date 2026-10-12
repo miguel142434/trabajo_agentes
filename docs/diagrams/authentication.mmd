@@ -1,0 +1,46 @@
+sequenceDiagram
+    actor U as Usuario
+    participant R as React y keycloak-js
+    participant K as Keycloak
+    participant A as FastAPI
+    participant S as security.py
+    participant D as PostgreSQL
+    R->>K: check-sso al iniciar
+    U->>R: Iniciar sesión
+    R->>K: Authorization Code, state y PKCE S256
+    U->>K: Credenciales en formulario de Keycloak
+    K-->>R: Redirección con código
+    R->>K: Intercambiar código y code_verifier
+    K-->>R: Tokens; adaptador los mantiene en memoria
+    U->>R: Consultar API protegida
+    R->>R: updateToken(30)
+    opt Renovación necesaria
+        R->>K: Renovar token
+        K-->>R: Nuevos tokens o error
+    end
+    Note over R,K: Si falla la renovación, limpiar sesión; no continuar la consulta
+    R->>A: HTTP Authorization Bearer access_token
+    A->>S: get_current_user en threadpool
+    alt KEYCLOAK_JWKS_JSON configurado
+        S->>S: Elegir clave pública del JSON por kid
+    else JWKS remoto
+        S->>K: Obtener clave vía PyJWKClient con caché
+        K-->>S: Claves públicas
+    end
+    S->>S: Validar RS256, iss, aud, exp, iat, azp, typ y sub UUID
+    alt Token válido
+        S-->>A: sub del usuario
+        A->>D: Filtrar por propietario; incluir globales en documentos
+        D-->>A: Datos autorizados
+        A-->>R: Resultado de la operación
+    else Token inválido
+        S-->>A: HTTP 401
+        A-->>R: 401; interfaz limpia sesión
+    else Consulta remota de claves no disponible
+        S-->>A: HTTP 503
+        A-->>R: Error controlado
+    end
+    U->>R: Cerrar sesión
+    R->>R: Crear URL de logout y limpiar tokens/estado privado
+    R->>K: Logout con retorno a /login
+    K-->>R: Volver al login

@@ -1,0 +1,33 @@
+flowchart TD
+    A["POST /api/chat/rag: question y conversation_id opcional"] --> B["Validar JWT y entrada"]
+    B --> C{"¿Conversación propia o nueva?"}
+    C -->|"No"| F["404 sin recuperar ni generar"]
+    C -->|"Sí"| D["Embedding de pregunta con nomic-embed-text"]
+    D --> E["pgvector: modelo compatible y propietario propio o system:global"]
+    E --> K["Orden por distancia coseno y Top-K"]
+    K --> R["Filtrar score = 1 - distance; score válido y mayor al umbral"]
+    R --> P["Construir contexto limitado y numerar fuentes"]
+    P --> HAS{"¿Hay fragmentos seleccionados?"}
+    HAS -->|"No: sin llamada a Qwen"| REJ["Rechazo explícito y sources vacío"]
+    HAS -->|"Sí"| MODE{"¿RAG_SINGLE_PASS?"}
+    MODE -->|"true"| ONE["Qwen: suficiencia, borrador y referencias en un JSON"]
+    ONE --> OK1{"¿Suficiente, no rechazo y con referencias?"}
+    OK1 -->|"No"| REJ
+    OK1 -->|"Sí"| VAL["Validar GroundedAnswer"]
+    MODE -->|"false"| GRADE["Primera llamada: clasificar contexto"]
+    GRADE --> OK2{"¿SUFFICIENT?"}
+    OK2 -->|"No"| REJ
+    OK2 -->|"Sí"| GEN["Segunda llamada: generar respuesta JSON"]
+    GEN --> VAL
+    VAL --> ANS{"¿Respuesta distinta de rechazo y con referencias?"}
+    ANS -->|"No"| REJ
+    ANS -->|"Sí"| SRC["Verificar pertenencia de fuentes y quitar duplicadas"]
+    SRC --> SAVE["Guardar pregunta, respuesta y fuentes en una transacción"]
+    REJ --> SAVE
+    SAVE --> OUT["200: answer, sources y conversation_id"]
+    ONE -.->|"JSON inválido"| ERR["Error técnico HTTP; no convertir en rechazo"]
+    GRADE -.->|"JSON inválido"| ERR
+    VAL -.->|"Formato inválido"| ERR
+    SRC -.->|"Referencia inexistente"| ERR
+    D -.->|"Fallo de embeddings"| ERR
+    GEN -.->|"Fallo de generación"| ERR
