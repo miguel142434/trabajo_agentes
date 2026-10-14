@@ -409,7 +409,8 @@ los datos compatibles. La información del corpus puede estar desactualizada.
 - Fase 15: preparación de despliegue; no implica publicación verificada.
 - Fase 16: README contrastado con código, equipo e instrucciones de ejecución.
 - Fase 17: [arquitectura y cinco diagramas Mermaid](docs/architecture.md) contrastados con el código.
-- Fases 18–20: pendientes según [plan_desarrollo.md](plan_desarrollo.md).
+- Fase 18: [borrador del documento técnico](docs/documento-tecnico.md), con evidencias y pendientes explícitos.
+- Fases 19–20: pendientes según [plan_desarrollo.md](plan_desarrollo.md).
 
 Guías: [frontend](docs/frontend.md), [integración y checklist](docs/phase12.md),
 [Docker](docs/phase13.md), [autenticación e historial](docs/history-auth.md),
